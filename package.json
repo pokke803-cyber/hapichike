@@ -4,7 +4,7 @@
   "private": true,
   "description": "HAPICHIKE is a static kids reward web app for chores, roulette points, and prize exchange.",
   "scripts": {
-    "build": "echo Static site ready",
+    "build": "node scripts/build.js",
     "dev": "python -m http.server 8000",
     "start": "python -m http.server 8000"
   },
