@@ -283,6 +283,151 @@
       padding: 8px 12px;
     }
 
+    .account-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+      padding: 8px 10px 8px 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .86);
+      border: 3px solid #ffd166;
+      box-shadow: 0 7px 0 rgba(239, 35, 60, .12);
+      color: #23324d;
+      font-weight: 900;
+    }
+
+    .account-chip button {
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: #38bdf8;
+      color: #fff;
+      font-weight: 900;
+      box-shadow: 0 4px 0 #1f8fbf;
+      cursor: pointer;
+    }
+
+    .login-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      background:
+        radial-gradient(circle at 18% 18%, rgba(255, 209, 102, .62), transparent 0 16%, transparent 24%),
+        radial-gradient(circle at 82% 20%, rgba(56, 189, 248, .42), transparent 0 15%, transparent 23%),
+        repeating-linear-gradient(135deg, #fff8d6 0 20px, #ffe6f0 20px 40px);
+    }
+
+    .login-screen.hidden {
+      display: none;
+    }
+
+    .login-card {
+      position: relative;
+      width: min(92vw, 520px);
+      padding: clamp(24px, 5vw, 38px);
+      border-radius: 32px;
+      border: 5px solid #111827;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 18px 0 rgba(255, 209, 102, .55), 0 28px 45px rgba(39, 48, 67, .22);
+      text-align: center;
+      overflow: hidden;
+    }
+
+    .login-card::before,
+    .login-card::after {
+      content: "★";
+      position: absolute;
+      color: #ffd166;
+      font-size: 3rem;
+      text-shadow: 0 3px 0 #111827;
+      animation: twinkle 2s ease-in-out infinite;
+    }
+
+    .login-card::before { left: 18px; top: 14px; }
+    .login-card::after { right: 20px; bottom: 16px; animation-delay: .45s; }
+
+    .login-mini-logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 4px solid #111827;
+      background: linear-gradient(135deg, #ef233c, #ffd166);
+      color: #fff;
+      font-size: clamp(1.45rem, 6vw, 2.6rem);
+      font-weight: 900;
+      text-shadow: 0 3px 0 #111827;
+      box-shadow: 0 8px 0 rgba(39, 48, 67, .18);
+    }
+
+    .login-card h2 {
+      margin: 0;
+      color: #23324d;
+      font-size: clamp(1.45rem, 5vw, 2rem);
+    }
+
+    .login-card p {
+      margin: 8px auto 18px;
+      max-width: 360px;
+      color: #475569;
+      font-weight: 800;
+    }
+
+    .login-card label {
+      display: grid;
+      gap: 8px;
+      text-align: left;
+      color: #23324d;
+      font-weight: 900;
+    }
+
+    .login-card input {
+      width: 100%;
+      border: 4px solid #ffd166;
+      border-radius: 18px;
+      padding: 14px 16px;
+      background: #fffdf1;
+      color: #23324d;
+      font-size: 1.15rem;
+      font-weight: 900;
+      outline: none;
+    }
+
+    .login-card input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 5px rgba(56, 189, 248, .18);
+    }
+
+    .login-error,
+    .edit-error {
+      min-height: 1.25em;
+      margin-top: 8px;
+      color: #ef233c;
+      font-size: .92rem;
+      font-weight: 900;
+    }
+
+    .login-submit {
+      width: 100%;
+      margin-top: 12px;
+      border: 0;
+      border-radius: 999px;
+      padding: 14px 18px;
+      background: linear-gradient(135deg, #ef233c, #ff8fab);
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: 900;
+      box-shadow: 0 8px 0 #9f1239, 0 16px 22px rgba(239, 35, 60, .18);
+      cursor: pointer;
+    }
+
     .mascot {
       position: absolute;
       right: clamp(8px, 3.2vw, 38px);
@@ -1433,6 +1578,20 @@
   </style>
 </head>
 <body>
+  <section class="login-screen hidden" id="loginScreen" aria-labelledby="loginTitle">
+    <form class="login-card" id="loginForm">
+      <div class="login-mini-logo">HAPICHIKE</div>
+      <h2 id="loginTitle">きみのハピチケをはじめよう</h2>
+      <p>お手伝いチケットをためて、ルーレットでごほうびポイントを集めよう♪</p>
+      <label>
+        こどもの名前
+        <input id="childNameInput" maxlength="12" autocomplete="off" placeholder="れい：うぱ">
+      </label>
+      <div class="login-error" id="loginError" role="alert"></div>
+      <button class="login-submit" type="submit">ハピチケをはじめる</button>
+    </form>
+  </section>
+
   <svg class="vegas-skyline" viewBox="0 0 1200 170" preserveAspectRatio="none" aria-hidden="true">
     <path fill="#31405a" d="M0 170V96h72V64h28v32h50V44h34v52h70V76h38v20h74V52h48v44h60V22h24v74h58V68h42v28h72V34h48v62h80V80h46v16h72V56h34v40h78V68h28v28h42v74z"/>
     <path fill="#ffd166" d="M67 112h18v18H67zm94-2h18v18h-18zm110 12h18v18h-18zm120-28h18v18h-18zm104 30h18v18h-18zm144-22h18v18h-18zm118-36h18v18h-18zm92 56h18v18h-18zm132-34h18v18h-18zm96 28h18v18h-18z"/>
@@ -1464,6 +1623,10 @@
           </h1>
         </div>
         <p class="subtitle">お手伝いチケットをためて、ルーレットでごほうびポイントをためよう♪</p>
+        <div class="account-chip" id="accountChip">
+          <span id="childGreeting">こんにちは！</span>
+          <button type="button" id="changeNameBtn">なまえを変える</button>
+        </div>
         <svg class="mascot" viewBox="0 0 260 260" role="img" aria-label="スターコインをジャグリングするHAPICHIKEのマスコット">
           <defs>
             <filter id="mascotShadow" x="-20%" y="-20%" width="140%" height="150%">
@@ -1546,7 +1709,7 @@
       </nav>
 
       <section class="panel active" id="tasks">
-        <h2 class="panel-title"><span>🎟️</span>今日のお手伝い</h2>
+        <h2 class="panel-title"><span>🎟️</span><span id="taskSectionTitle">今日のお手伝い</span></h2>
         <div class="task-tools">
           <button class="primary" id="addTaskBtn">あたらしく追加</button>
           <button class="secondary" id="resetDayBtn">今日の状態をリセット</button>
@@ -1653,6 +1816,7 @@
           <button class="secondary" type="button" id="deleteTaskBtn">削除</button>
           <button class="primary" type="submit">保存</button>
         </div>
+        <div class="edit-error" id="taskEditError" role="alert"></div>
       </form>
     </section>
   </div>
@@ -1786,11 +1950,12 @@
         const saved = JSON.parse(localStorage.getItem(storageKey));
         if (saved && Array.isArray(saved.tasks)) return normalizeState(saved);
       } catch (error) {}
-      return normalizeState({ coins: 0, tasks: defaultTasks, history: [], payLogs: [], badges: [] });
+      return normalizeState({ childName: "", coins: 0, tasks: defaultTasks, history: [], payLogs: [], badges: [] });
     }
 
     function normalizeState(saved) {
       return {
+        childName: sanitizeName(saved.childName || ""),
         coins: Number(saved.coins) || 0,
         tasks: Array.isArray(saved.tasks) ? normalizeTasks(saved.tasks) : defaultTasks.map(task => ({ ...task })),
         history: Array.isArray(saved.history) ? saved.history : [],
@@ -1839,6 +2004,10 @@
       localStorage.setItem(storageKey, JSON.stringify(state));
     }
 
+    function sanitizeName(value) {
+      return String(value || "").trim().replace(/\s+/g, " ").slice(0, 12);
+    }
+
     function todayString() {
       return new Intl.DateTimeFormat("ja-JP", {
         month: "numeric",
@@ -1870,6 +2039,7 @@
     }
 
     function render() {
+      renderAccount();
       renderTasks();
       renderRewards();
       renderHistory();
@@ -1889,6 +2059,51 @@
       document.getElementById("taskTotal").textContent = state.tasks.length;
       document.getElementById("levelText").textContent = Math.max(1, Math.floor((state.history.length + state.coins) / 6) + 1);
       renderBadges(done);
+    }
+
+    function renderAccount() {
+      const name = sanitizeName(state.childName);
+      const loginScreen = document.getElementById("loginScreen");
+      const nameInput = document.getElementById("childNameInput");
+      const greeting = document.getElementById("childGreeting");
+      const taskTitle = document.getElementById("taskSectionTitle");
+
+      if (name) {
+        loginScreen.classList.add("hidden");
+        greeting.textContent = `こんにちは、${name}！`;
+        taskTitle.textContent = `${name}の今日のお手伝い`;
+      } else {
+        loginScreen.classList.remove("hidden");
+        greeting.textContent = "こんにちは！";
+        taskTitle.textContent = "今日のお手伝い";
+        nameInput.value = "";
+        setTimeout(() => nameInput.focus(), 0);
+      }
+    }
+
+    function openNameLogin() {
+      document.getElementById("childNameInput").value = sanitizeName(state.childName);
+      document.getElementById("loginError").textContent = "";
+      document.getElementById("loginScreen").classList.remove("hidden");
+      setTimeout(() => document.getElementById("childNameInput").focus(), 0);
+    }
+
+    function saveChildName(event) {
+      event.preventDefault();
+      const input = document.getElementById("childNameInput");
+      const error = document.getElementById("loginError");
+      const name = sanitizeName(input.value);
+
+      if (!name) {
+        error.textContent = "なまえをいれてね";
+        input.focus();
+        return;
+      }
+
+      state.childName = name;
+      saveState();
+      renderAccount();
+      showToast(`${name}のハピチケをはじめます！`);
     }
 
     function renderPoints() {
@@ -2267,11 +2482,13 @@
       document.getElementById("editTaskTitle").value = task.title;
       document.getElementById("editTaskDifficulty").value = task.difficulty;
       document.getElementById("editTaskReward").value = String(task.ticketReward);
+      document.getElementById("taskEditError").textContent = "";
       document.getElementById("taskEditModal").classList.remove("hidden");
     }
 
     function closeTaskEditor() {
       document.getElementById("taskEditModal").classList.add("hidden");
+      document.getElementById("taskEditError").textContent = "";
       editingTaskId = null;
     }
 
@@ -2279,10 +2496,30 @@
       event.preventDefault();
       const task = state.tasks.find(item => item.id === editingTaskId);
       if (!task) return;
+      const title = document.getElementById("editTaskTitle").value.trim();
+      const difficulty = document.getElementById("editTaskDifficulty").value;
+      const reward = Number(document.getElementById("editTaskReward").value);
+      const error = document.getElementById("taskEditError");
+
+      if (!title) {
+        error.textContent = "お手伝い名をいれてね";
+        return;
+      }
+
+      if (!["easy", "normal", "hard"].includes(difficulty)) {
+        error.textContent = "難易度をえらんでね";
+        return;
+      }
+
+      if (!Number.isInteger(reward) || reward < 1 || reward > 5) {
+        error.textContent = "TICKET枚数は1〜5枚でえらんでね";
+        return;
+      }
+
       task.icon = document.getElementById("editTaskIcon").value.trim() || "⭐";
-      task.title = document.getElementById("editTaskTitle").value.trim() || "新しいお手伝い";
-      task.difficulty = document.getElementById("editTaskDifficulty").value;
-      task.ticketReward = Math.min(5, Math.max(1, Number(document.getElementById("editTaskReward").value) || 1));
+      task.title = title;
+      task.difficulty = difficulty;
+      task.ticketReward = reward;
       saveState();
       render();
       closeTaskEditor();
@@ -2384,6 +2621,8 @@
       if (event.target.id === "infoModal") closeInfoModal();
     });
     document.getElementById("taskEditForm").addEventListener("submit", saveTaskEditor);
+    document.getElementById("loginForm").addEventListener("submit", saveChildName);
+    document.getElementById("changeNameBtn").addEventListener("click", openNameLogin);
     document.getElementById("taskEditClose").addEventListener("click", closeTaskEditor);
     document.getElementById("deleteTaskBtn").addEventListener("click", deleteEditingTask);
     document.getElementById("taskEditModal").addEventListener("click", event => {
