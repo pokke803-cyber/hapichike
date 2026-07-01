@@ -1,0 +1,2407 @@
+﻿<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="HAPICHIKE は、小学生向けのお手伝い・ルーレット・ごほうび交換を楽しむWebアプリです。">
+  <meta name="theme-color" content="#ff6f91">
+  <meta property="og:title" content="HAPICHIKE">
+  <meta property="og:description" content="お手伝いでチケットを集め、ジャンル別ポイントをごほうびと交換するキッズ向けWebアプリ。">
+  <meta property="og:type" content="website">
+  <title>HAPICHIKE</title>
+  <style>
+    :root {
+      --ink: #273043;
+      --sky: #81d4fa;
+      --mint: #5ee7a5;
+      --rose: #ff6f91;
+      --sun: #ffd166;
+      --violet: #a78bfa;
+      --felt: #16a085;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Yu Gothic", "Meiryo", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 14% 12%, rgba(255, 255, 255, .92) 0 8%, transparent 9%),
+        radial-gradient(circle at 86% 18%, rgba(255, 241, 118, .7) 0 7%, transparent 8%),
+        linear-gradient(180deg, #83d8ff 0%, #c8f6ff 42%, #fff3c4 100%);
+      overflow-x: hidden;
+    }
+
+    button, input, select { font-family: inherit; }
+
+    .stage {
+      position: relative;
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .vegas-skyline {
+      position: fixed;
+      inset: auto 0 0;
+      height: 150px;
+      pointer-events: none;
+      opacity: .82;
+      z-index: 0;
+    }
+
+    .main-shell {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 210px;
+      padding: 18px;
+      overflow: hidden;
+      border: 4px solid rgba(255, 255, 255, .82);
+      border-radius: 22px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, .86), rgba(255, 255, 255, .54)),
+        radial-gradient(circle at 80% 15%, rgba(255, 209, 102, .55), transparent 28%),
+        linear-gradient(135deg, #ff8fab, #73d2de 55%, #ffd166);
+      box-shadow: 0 18px 45px rgba(56, 78, 116, .2);
+    }
+
+    .logo-wrap {
+      position: relative;
+      width: min(100%, 790px);
+      min-height: clamp(114px, 20vw, 190px);
+      display: grid;
+      align-items: center;
+      padding: clamp(16px, 3vw, 26px) clamp(12px, 3vw, 22px);
+      isolation: isolate;
+    }
+
+    .logo-burst {
+      position: absolute;
+      left: clamp(6px, 1.4vw, 18px);
+      top: 50%;
+      width: clamp(92px, 16vw, 150px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      transform: translateY(-50%);
+      background:
+        radial-gradient(circle, #fff 0 26%, transparent 27%),
+        conic-gradient(#ef233c 0 18deg, #ffd166 18deg 36deg, #111827 36deg 54deg, #ffffff 54deg 72deg, #ef233c 72deg 90deg, #ffd166 90deg 108deg, #111827 108deg 126deg, #ffffff 126deg 144deg, #ef233c 144deg 162deg, #ffd166 162deg 180deg, #111827 180deg 198deg, #ffffff 198deg 216deg, #ef233c 216deg 234deg, #ffd166 234deg 252deg, #111827 252deg 270deg, #ffffff 270deg 288deg, #ef233c 288deg 306deg, #ffd166 306deg 324deg, #111827 324deg 342deg, #ffffff 342deg 360deg);
+      border: 7px solid #fff7c7;
+      box-shadow: 0 9px 0 rgba(39, 48, 67, .22), 0 0 0 4px #111827;
+      animation: logoDrift 4.8s ease-in-out infinite;
+      z-index: -1;
+    }
+
+    .logo-burst::after {
+      content: "";
+      position: absolute;
+      inset: 34%;
+      border-radius: 50%;
+      background: radial-gradient(circle, #ffd166, #ff9f1c);
+      border: 5px solid #fff;
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, .7);
+    }
+
+    .ticket-strip {
+      position: absolute;
+      left: clamp(68px, 10vw, 122px);
+      right: clamp(8px, 2vw, 20px);
+      bottom: clamp(14px, 3vw, 25px);
+      height: clamp(38px, 6vw, 58px);
+      border-radius: 12px;
+      background:
+        radial-gradient(circle at 0 50%, transparent 0 12px, #ffd166 13px),
+        radial-gradient(circle at 100% 50%, transparent 0 12px, #ffd166 13px),
+        repeating-linear-gradient(90deg, #ffd166 0 28px, #ffe9a3 28px 42px);
+      border: 4px solid #111827;
+      transform: rotate(-2deg);
+      box-shadow: 0 8px 0 rgba(39, 48, 67, .18);
+      z-index: -1;
+    }
+
+    .logo-title {
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      gap: clamp(1px, .35vw, 6px);
+      margin: 0;
+      white-space: nowrap;
+      transform: rotate(-1deg);
+      filter: drop-shadow(0 10px 0 rgba(39, 48, 67, .18));
+    }
+
+    .logo-letter {
+      position: relative;
+      display: inline-grid;
+      place-items: center;
+      min-width: .68em;
+      color: #fff;
+      font-size: clamp(2.36rem, 9.1vw, 6.35rem);
+      line-height: .82;
+      font-family: "Arial Rounded MT Bold", "Yu Gothic", "Meiryo", system-ui, sans-serif;
+      font-weight: 900;
+      letter-spacing: 0;
+      -webkit-text-stroke: clamp(2px, .5vw, 5px) #111827;
+      text-shadow:
+        0 clamp(3px, .7vw, 7px) 0 #ef233c,
+        0 clamp(6px, 1.1vw, 11px) 0 #ffd166,
+        clamp(2px, .45vw, 5px) clamp(8px, 1.5vw, 16px) 0 rgba(17, 24, 39, .22);
+    }
+
+    .logo-letter:nth-child(odd) { color: #fff8d6; }
+    .logo-letter:nth-child(3n) { color: #ffef7a; text-shadow: 0 clamp(3px, .7vw, 7px) 0 #ef233c, 0 clamp(6px, 1.1vw, 11px) 0 #111827, clamp(2px, .45vw, 5px) clamp(8px, 1.5vw, 16px) 0 rgba(17, 24, 39, .22); }
+    .logo-letter:nth-child(4n) { color: #ef233c; text-shadow: 0 clamp(3px, .7vw, 7px) 0 #fff, 0 clamp(6px, 1.1vw, 11px) 0 #ffd166, clamp(2px, .45vw, 5px) clamp(8px, 1.5vw, 16px) 0 rgba(17, 24, 39, .22); }
+
+    .logo-letter.h-smile::before,
+    .logo-letter.h-smile::after {
+      content: "";
+      position: absolute;
+      top: 32%;
+      width: .07em;
+      height: .07em;
+      border-radius: 50%;
+      background: #111827;
+      z-index: 2;
+    }
+
+    .logo-letter.h-smile::before { left: 36%; }
+    .logo-letter.h-smile::after { right: 36%; }
+
+    .smile-mouth {
+      position: absolute;
+      left: 50%;
+      top: 47%;
+      width: .26em;
+      height: .13em;
+      border-bottom: .045em solid #111827;
+      border-radius: 0 0 999px 999px;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+
+    .p-star {
+      position: absolute;
+      top: 20%;
+      right: 19%;
+      color: #ffd166;
+      font-size: .25em;
+      -webkit-text-stroke: 1px #111827;
+      text-shadow: 0 2px 0 #ef233c;
+      z-index: 2;
+      animation: twinkle 1.9s ease-in-out infinite;
+    }
+
+    .logo-letter.i-spark::before {
+      content: "✦";
+      position: absolute;
+      top: -.38em;
+      left: 50%;
+      color: #ffd166;
+      font-size: .38em;
+      -webkit-text-stroke: 1px #111827;
+      transform: translateX(-50%);
+      animation: twinkle 1.7s ease-in-out infinite;
+    }
+
+    .logo-face {
+      position: absolute;
+      right: .03em;
+      bottom: .09em;
+      font-size: .17em;
+      color: #111827;
+      -webkit-text-stroke: 0;
+      text-shadow: none;
+    }
+
+    .logo-coin,
+    .logo-ticket,
+    .logo-shine {
+      position: absolute;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .logo-coin {
+      right: clamp(18px, 6vw, 86px);
+      top: clamp(8px, 2vw, 18px);
+      width: clamp(30px, 5.2vw, 54px);
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fff8b5 0 20%, #ffd166 21% 62%, #ef233c 63% 100%);
+      border: 4px dashed #fff;
+      box-shadow: 0 5px 0 rgba(17, 24, 39, .22);
+      color: #111827;
+      font-weight: 900;
+      animation: logoFloat 4.1s ease-in-out infinite reverse;
+    }
+
+    .logo-ticket {
+      right: clamp(82px, 14vw, 170px);
+      top: clamp(4px, 1vw, 10px);
+      padding: 5px 12px;
+      border-radius: 8px;
+      background: #fff;
+      border: 3px solid #111827;
+      color: #ef233c;
+      font-size: clamp(.64rem, 1.4vw, .95rem);
+      font-weight: 900;
+      transform: rotate(9deg);
+      box-shadow: 0 4px 0 rgba(17, 24, 39, .18);
+    }
+
+    .logo-shine {
+      color: #fff;
+      font-size: clamp(1.1rem, 2.8vw, 2rem);
+      text-shadow: 0 2px 0 #111827;
+      animation: twinkle 1.8s ease-in-out infinite;
+    }
+
+    .logo-shine.one { left: clamp(124px, 20vw, 230px); top: 4px; }
+    .logo-shine.two { right: clamp(8px, 2vw, 22px); bottom: clamp(18px, 4vw, 36px); animation-delay: .5s; }
+
+    .subtitle {
+      margin: 12px 0 0;
+      max-width: 640px;
+      font-size: clamp(.98rem, 2.4vw, 1.25rem);
+      font-weight: 800;
+      color: #23324d;
+      background: rgba(255, 255, 255, .72);
+      border: 2px solid rgba(255, 255, 255, .84);
+      border-radius: 14px;
+      display: inline-block;
+      padding: 8px 12px;
+    }
+
+    .mascot {
+      position: absolute;
+      right: clamp(8px, 3.2vw, 38px);
+      bottom: 4px;
+      width: clamp(142px, 24vw, 238px);
+      filter: drop-shadow(0 12px 18px rgba(39, 48, 67, .25));
+      animation: floaty 3.2s ease-in-out infinite;
+    }
+
+    .mascot-orbit {
+      transform-origin: center;
+      animation: mascotOrbit 3.4s ease-in-out infinite;
+    }
+
+    .mascot-orbit.delay-one { animation-delay: .35s; }
+    .mascot-orbit.delay-two { animation-delay: .7s; }
+
+    .sparkle {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: #fff;
+      clip-path: polygon(50% 0, 62% 36%, 100% 50%, 62% 64%, 50% 100%, 38% 64%, 0 50%, 38% 36%);
+      animation: twinkle 1.6s ease-in-out infinite;
+    }
+
+    .sparkle:nth-child(1) { left: 19%; top: 18%; animation-delay: .1s; }
+    .sparkle:nth-child(2) { left: 63%; top: 16%; animation-delay: .6s; transform: scale(.72); }
+    .sparkle:nth-child(3) { left: 74%; top: 58%; animation-delay: .95s; transform: scale(.55); }
+
+    .status-bar {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .meter {
+      min-height: 86px;
+      padding: 12px;
+      border-radius: 18px;
+      border: 3px solid rgba(255, 255, 255, .86);
+      background: rgba(255, 255, 255, .78);
+      box-shadow: 0 10px 22px rgba(62, 76, 112, .13);
+    }
+
+    .meter-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      font-size: .86rem;
+      font-weight: 900;
+    }
+
+    .meter-value {
+      font-size: clamp(1.35rem, 4vw, 2.1rem);
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .chip {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 5px dashed rgba(255, 255, 255, .95);
+      background: radial-gradient(circle, #fff8b5 0 22%, #ffd166 23% 52%, #ef476f 53% 100%);
+      color: #5c1432;
+      font-size: .78rem;
+      font-weight: 900;
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, .7), 0 4px 0 rgba(0, 0, 0, .08);
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .tab {
+      min-height: 54px;
+      border: 0;
+      border-radius: 16px;
+      color: #31405a;
+      background: rgba(255, 255, 255, .82);
+      font-size: clamp(.75rem, 2.2vw, 1rem);
+      font-weight: 900;
+      box-shadow: 0 6px 0 rgba(67, 85, 121, .16);
+      cursor: pointer;
+      transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+
+    .tab.active {
+      color: #fff;
+      background: linear-gradient(135deg, #ff6f91, #7c3aed);
+      box-shadow: 0 6px 0 rgba(86, 36, 145, .35);
+    }
+
+    .tab:active, .primary:active, .icon-button:active, .reward-button:active {
+      transform: translateY(3px);
+      box-shadow: 0 2px 0 rgba(67, 85, 121, .18);
+    }
+
+    .panel {
+      display: none;
+      padding: 16px;
+      border-radius: 22px;
+      border: 4px solid rgba(255, 255, 255, .82);
+      background: rgba(255, 255, 255, .72);
+      box-shadow: 0 18px 45px rgba(56, 78, 116, .16);
+      animation: popIn .32s ease both;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    .panel-title {
+      margin: 0 0 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: clamp(1.25rem, 4vw, 2rem);
+      font-weight: 900;
+    }
+
+    .task-grid, .reward-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+    }
+
+    .shop-hero {
+      position: relative;
+      margin-bottom: 14px;
+      padding: 16px;
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 12% 20%, rgba(255, 111, 145, .24), transparent 20%),
+        radial-gradient(circle at 86% 16%, rgba(255, 209, 102, .42), transparent 18%),
+        linear-gradient(135deg, #fff, #fff8d6 52%, #dff7ff);
+      border: 3px solid #fff;
+      box-shadow: 0 8px 0 rgba(255, 111, 145, .14), 0 12px 24px rgba(39, 48, 67, .1);
+      outline: 2px solid rgba(255, 209, 102, .42);
+      overflow: hidden;
+    }
+
+    .shop-hero::after {
+      content: "★";
+      position: absolute;
+      right: 18px;
+      top: 8px;
+      color: rgba(255, 111, 145, .38);
+      font-size: 2.4rem;
+      font-weight: 900;
+    }
+
+    .shop-title {
+      margin: 0;
+      font-size: clamp(1.8rem, 6vw, 3.5rem);
+      line-height: 1;
+      color: #fff;
+      -webkit-text-stroke: 2px #273043;
+      text-shadow: 0 4px 0 #ff6f91, 0 7px 0 #ffd166, 0 12px 20px rgba(39, 48, 67, .18);
+      font-weight: 900;
+    }
+
+    .shop-subtitle {
+      margin: 10px 0 0;
+      font-weight: 900;
+      color: #273043;
+    }
+
+    .task-card, .reward-card, .log-item {
+      border: 3px solid rgba(255, 255, 255, .9);
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 8px 0 rgba(65, 84, 123, .1);
+    }
+
+    .task-card {
+      position: relative;
+      display: grid;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 26px;
+      background:
+        radial-gradient(circle at 92% 10%, rgba(255, 209, 102, .35), transparent 24%),
+        linear-gradient(135deg, #fff, #fff8d6);
+      border: 3px solid #fff;
+      box-shadow: 0 8px 0 rgba(255, 111, 145, .14), 0 12px 22px rgba(39, 48, 67, .1);
+      outline: 2px solid rgba(255, 209, 102, .35);
+      overflow: hidden;
+    }
+
+    .task-card::after {
+      content: "★";
+      position: absolute;
+      right: 12px;
+      top: 8px;
+      color: rgba(255, 111, 145, .36);
+      font-size: 2rem;
+      font-weight: 900;
+    }
+
+    .task-card.in-progress {
+      background:
+        radial-gradient(circle at 92% 10%, rgba(56, 189, 248, .32), transparent 24%),
+        linear-gradient(135deg, #fff, #dff7ff);
+      outline-color: rgba(56, 189, 248, .42);
+    }
+
+    .task-card.done {
+      background:
+        radial-gradient(circle at 92% 10%, rgba(34, 197, 94, .28), transparent 24%),
+        linear-gradient(135deg, #fff, #e9f9ef);
+      outline-color: rgba(34, 197, 94, .42);
+    }
+
+    .task-top {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+    }
+
+    .task-art {
+      width: 58px;
+      height: 58px;
+      display: grid;
+      place-items: center;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #fff, #ffd166);
+      border: 3px solid #fff;
+      box-shadow: 0 6px 0 rgba(255, 159, 28, .22);
+      font-size: 2rem;
+      animation: wiggle 2.8s ease-in-out infinite;
+    }
+
+    .task-name-display {
+      position: relative;
+      z-index: 1;
+      font-size: 1.08rem;
+      font-weight: 900;
+      color: var(--ink);
+      line-height: 1.25;
+    }
+
+    .task-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .task-badge,
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #fff;
+      font-size: .78rem;
+      font-weight: 900;
+      box-shadow: 0 4px 0 rgba(39, 48, 67, .08);
+    }
+
+    .task-badge.easy { color: #118a5f; background: #e9f9ef; }
+    .task-badge.normal { color: #9a5d00; background: #fff8d6; }
+    .task-badge.hard { color: #ef233c; background: #ffe4ec; }
+
+    .status-badge.idle { color: #64748b; }
+    .status-badge.inProgress { color: #0284c7; background: #dff7ff; }
+    .status-badge.done { color: #118a5f; background: #e9f9ef; }
+
+    .ticket-reward {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 10px;
+      border-radius: 18px;
+      background: #fff;
+      border: 2px solid rgba(255, 209, 102, .72);
+      font-weight: 900;
+    }
+
+    .ticket-icons {
+      letter-spacing: -2px;
+      white-space: nowrap;
+    }
+
+    .task-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .task-action {
+      min-height: 42px;
+      border: 3px solid #fff;
+      border-radius: 16px;
+      color: #273043;
+      font-weight: 900;
+      background: #fff;
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .1);
+      cursor: pointer;
+      transition: transform .16s ease, box-shadow .16s ease;
+    }
+
+    .task-action:hover:not(:disabled) {
+      transform: translateY(-2px);
+    }
+
+    .task-action.start { background: linear-gradient(135deg, #ffd166, #fff8d6); }
+    .task-action.finish { background: linear-gradient(135deg, #22c55e, #e9f9ef); color: #064e3b; }
+    .task-action.edit { background: linear-gradient(135deg, #fff, #dff7ff); }
+
+    .task-action:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .task-tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 14px;
+    }
+
+    .task-tools .primary,
+    .task-tools .secondary {
+      border-radius: 999px;
+      border: 3px solid #fff;
+      box-shadow: 0 6px 0 rgba(255, 111, 145, .14);
+    }
+
+    .edit-form {
+      display: grid;
+      gap: 10px;
+    }
+
+    .edit-form label {
+      display: grid;
+      gap: 5px;
+      font-weight: 900;
+    }
+
+    .edit-form input,
+    .edit-form select {
+      width: 100%;
+      border: 3px solid #ffd166;
+      border-radius: 14px;
+      padding: 10px;
+      font-size: 1rem;
+      font-weight: 800;
+      background: #fff;
+      color: #273043;
+    }
+
+    .edit-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .tool-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .primary, .secondary, .reward-button {
+      border: 0;
+      border-radius: 15px;
+      padding: 12px 14px;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 0 rgba(67, 85, 121, .18);
+      transition: transform .16s ease, box-shadow .16s ease;
+    }
+
+    .primary {
+      color: #fff;
+      background: linear-gradient(135deg, #06b6d4, #7c3aed);
+    }
+
+    .secondary {
+      color: #31405a;
+      background: #ffffff;
+      border: 2px solid #dce7f8;
+    }
+
+    .casino-table {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(240px, .95fr);
+      gap: 18px;
+      align-items: center;
+      padding: clamp(14px, 2.4vw, 22px);
+      border-radius: 34px;
+      background:
+        radial-gradient(circle at 12% 14%, rgba(255, 111, 145, .22) 0 10%, transparent 11%),
+        radial-gradient(circle at 88% 18%, rgba(255, 209, 102, .42) 0 9%, transparent 10%),
+        radial-gradient(circle at 76% 86%, rgba(56, 189, 248, .22) 0 12%, transparent 13%),
+        repeating-linear-gradient(135deg, rgba(255,255,255,.72) 0 12px, rgba(255,248,214,.72) 12px 24px),
+        linear-gradient(135deg, #fff8d6, #fefcff 48%, #dff7ff);
+      border: 4px solid #fff;
+      box-shadow: 0 12px 0 rgba(255, 111, 145, .18), 0 18px 34px rgba(39, 48, 67, .14), inset 0 0 0 3px #ffd166;
+      overflow: hidden;
+    }
+
+    .casino-table::before,
+    .casino-table::after {
+      position: absolute;
+      z-index: 0;
+      pointer-events: none;
+      font-weight: 900;
+      filter: drop-shadow(0 3px 0 rgba(17, 24, 39, .12));
+    }
+
+    .casino-table::before {
+      content: "★";
+      left: 18px;
+      top: 12px;
+      color: #ff6f91;
+      font-size: 2rem;
+      animation: twinkle 2.4s ease-in-out infinite;
+    }
+
+    .casino-table::after {
+      content: "TICKET";
+      right: 16px;
+      bottom: 12px;
+      padding: 5px 12px;
+      border-radius: 10px;
+      color: #ef233c;
+      background: #fff;
+      border: 2px solid #ffd166;
+      transform: rotate(-8deg);
+      font-size: .78rem;
+    }
+
+    .wheel-wrap {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      min-height: 350px;
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 50% 50%, rgba(255,255,255,.58), transparent 58%),
+        repeating-radial-gradient(circle, rgba(255, 209, 102, .25) 0 8px, transparent 8px 18px);
+    }
+
+    .pointer {
+      position: absolute;
+      top: 0;
+      width: 0;
+      height: 0;
+      border-left: 24px solid transparent;
+      border-right: 24px solid transparent;
+      border-top: 46px solid #ff6f91;
+      z-index: 3;
+      filter: drop-shadow(0 3px 0 #fff) drop-shadow(0 6px 0 rgba(17, 24, 39, .18));
+    }
+
+    .wheel {
+      width: min(75vw, 320px);
+      aspect-ratio: 1;
+      border-radius: 50%;
+      border: 9px solid #fff7c7;
+      position: relative;
+      overflow: hidden;
+      background: conic-gradient(#ef233c 0 70deg, #ffd166 70deg 145deg, #fff 145deg 215deg, #111827 215deg 260deg, #ef233c 260deg 315deg, #ffd166 315deg 360deg);
+      box-shadow: 0 0 0 5px #ffd166, 0 0 0 9px rgba(255,255,255,.95), 0 14px 0 rgba(255, 159, 28, .24), 0 18px 28px rgba(39, 48, 67, .16), inset 0 0 0 8px rgba(255, 255, 255, .38);
+      transition: transform 3.6s cubic-bezier(.1, .76, .12, 1);
+    }
+
+    .wheel::after {
+      content: "";
+      position: absolute;
+      inset: 36%;
+      border-radius: 50%;
+      background: radial-gradient(circle, #fff 0 24%, #ffd166 25% 62%, #ff6f91 63% 100%);
+      border: 5px solid #fff;
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, .85), 0 0 0 4px #ffd166, 0 0 0 7px rgba(17,24,39,.12);
+    }
+
+    .wheel-label {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 42%;
+      transform-origin: 0 0;
+      color: #fff;
+      text-shadow: 0 2px 0 rgba(17, 24, 39, .78), 0 0 5px rgba(17, 24, 39, .4);
+      font-size: .78rem;
+      font-weight: 900;
+      text-align: right;
+      padding-right: 12px;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .spin-button {
+      position: absolute;
+      z-index: 4;
+      width: 98px;
+      height: 98px;
+      border-radius: 50%;
+      border: 6px solid #fff;
+      color: #111827;
+      background: radial-gradient(circle at 35% 28%, #fff 0 18%, #fff8b5 19% 36%, #ffd166 37% 68%, #ff6f91 69% 100%);
+      font-size: 1.1rem;
+      font-weight: 900;
+      box-shadow: inset 0 4px 0 rgba(255,255,255,.85), 0 0 0 4px #ffd166, 0 8px 0 rgba(239, 35, 60, .24), 0 12px 20px rgba(39, 48, 67, .18);
+      cursor: pointer;
+      transition: transform .16s ease, box-shadow .16s ease;
+    }
+
+    .spin-button:hover:not(:disabled) {
+      transform: translateY(-2px) scale(1.03);
+    }
+
+    .spin-button:disabled {
+      cursor: not-allowed;
+      filter: grayscale(.35);
+      opacity: .58;
+      box-shadow: inset 0 3px 0 rgba(255,255,255,.55), 0 4px 0 rgba(17, 24, 39, .12);
+    }
+
+    .roulette-dashboard {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .roulette-stat {
+      padding: 12px 10px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #ffffff, #fff8d6);
+      border: 3px solid rgba(255, 255, 255, .96);
+      box-shadow: 0 7px 0 rgba(255, 111, 145, .14), 0 10px 20px rgba(39, 48, 67, .1);
+      font-weight: 900;
+      text-align: center;
+      outline: 2px solid rgba(255, 209, 102, .52);
+    }
+
+    .roulette-stat span {
+      display: block;
+      margin-top: 4px;
+      color: #ef233c;
+      font-size: 1.55rem;
+      line-height: 1;
+      text-shadow: 0 2px 0 rgba(255, 209, 102, .55);
+    }
+
+    .bet-panel {
+      padding: 14px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #fff, #fff8d6);
+      border: 3px solid #fff;
+      box-shadow: 0 8px 0 rgba(255, 209, 102, .3), 0 12px 22px rgba(39, 48, 67, .1);
+      outline: 2px solid rgba(255, 209, 102, .65);
+    }
+
+    .bet-panel strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1rem;
+      color: #273043;
+    }
+
+    .bet-buttons {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+    }
+
+    .info-buttons {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .info-button {
+      min-height: 46px;
+      border: 2px solid #fff;
+      border-radius: 18px;
+      background: #fff;
+      color: #111827;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 6px 0 rgba(56, 189, 248, .2), 0 8px 16px rgba(39, 48, 67, .1);
+      transition: transform .16s ease, box-shadow .16s ease;
+    }
+
+    .info-button:first-child {
+      background: linear-gradient(135deg, #ffd166, #fff8d6);
+    }
+
+    .info-button:last-child {
+      background: linear-gradient(135deg, #ffffff, #dff7ff);
+    }
+
+    .info-button:hover {
+      transform: translateY(-2px);
+    }
+
+    .bet-button {
+      min-height: 46px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      background: radial-gradient(circle at 35% 25%, #fff 0 22%, #fff8d6 23% 56%, #ffd166 57% 100%);
+      color: #111827;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: inset 0 2px 0 rgba(255,255,255,.8), 0 5px 0 rgba(255, 159, 28, .25), 0 8px 14px rgba(39, 48, 67, .1);
+      transition: transform .16s ease, box-shadow .16s ease;
+    }
+
+    .bet-button.active {
+      background: radial-gradient(circle at 30% 20%, #fff 0 14%, #ffd166 15% 42%, #ff6f91 43% 100%);
+      color: #fff;
+      text-shadow: 0 2px 0 #111827;
+      transform: translateY(-3px) scale(1.08);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,.8), 0 7px 0 rgba(239, 35, 60, .24), 0 10px 18px rgba(39, 48, 67, .14);
+    }
+
+    .bet-button:disabled {
+      cursor: not-allowed;
+      opacity: .42;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .segment-list {
+      display: grid;
+      gap: 6px;
+    }
+
+    .segment-chip {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 16px;
+      background: #fff;
+      border: 2px solid rgba(255, 209, 102, .8);
+      font-size: .82rem;
+      font-weight: 900;
+    }
+
+    .segment-chip.rare { border-color: #ef233c; color: #ef233c; }
+    .segment-chip.safe { color: #64748b; }
+    .segment-chip.minus { color: #0f172a; background: #f1f5f9; }
+
+    #luckyText {
+      display: block;
+      padding: 12px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #ffffff, #fff8d6);
+      border: 3px solid #fff;
+      font-weight: 900;
+      box-shadow: 0 7px 0 rgba(255, 209, 102, .28), 0 10px 18px rgba(39, 48, 67, .1);
+      outline: 2px solid rgba(255, 209, 102, .62);
+    }
+
+    #luckyText .segment-chip {
+      margin-top: 8px;
+      box-shadow: none;
+    }
+
+    #luckyText.result-good {
+      color: #118a5f;
+      background: linear-gradient(135deg, #ffffff, #e9f9ef);
+      outline-color: rgba(34, 197, 94, .45);
+    }
+
+    #luckyText.result-miss {
+      color: #64748b;
+      background: linear-gradient(135deg, #ffffff, #f8fafc);
+    }
+
+    #luckyText.result-minus {
+      color: #273043;
+      background: linear-gradient(135deg, #ffffff, #fff8d6);
+      outline-color: rgba(239, 35, 60, .35);
+    }
+
+    .roulette-side {
+      display: grid;
+      gap: 12px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .category-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .category-tab {
+      min-height: 58px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      color: #31405a;
+      background: linear-gradient(135deg, #fff, #fff8d6);
+      font-size: clamp(.82rem, 2.4vw, 1rem);
+      font-weight: 900;
+      box-shadow: 0 6px 0 rgba(56, 189, 248, .16), 0 8px 16px rgba(39, 48, 67, .08);
+      cursor: pointer;
+      transition: transform .16s ease, box-shadow .16s ease;
+    }
+
+    .category-tab.active {
+      color: #fff;
+      background: linear-gradient(135deg, #ff6f91, #a78bfa);
+      text-shadow: 0 2px 0 rgba(17, 24, 39, .35);
+      transform: translateY(-2px);
+      box-shadow: 0 7px 0 rgba(255, 111, 145, .24), 0 10px 18px rgba(39, 48, 67, .12);
+    }
+
+    .point-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .point-pill {
+      padding: 12px 10px;
+      border-radius: 22px;
+      background: linear-gradient(135deg, #fff, #fefcff);
+      border: 3px solid #fff;
+      box-shadow: 0 7px 0 rgba(167, 139, 250, .16), 0 10px 18px rgba(39, 48, 67, .09);
+      font-weight: 900;
+      text-align: center;
+      outline: 2px solid rgba(167, 139, 250, .22);
+    }
+
+    .point-pill strong {
+      display: block;
+      font-size: 1.55rem;
+      line-height: 1;
+      color: #7c3aed;
+      margin-top: 4px;
+    }
+
+    .mini-sign {
+      padding: 14px;
+      border-radius: 24px;
+      background: rgba(255, 255, 255, .94);
+      border: 3px solid #fff;
+      box-shadow: 0 8px 0 rgba(56, 189, 248, .14), 0 10px 18px rgba(39, 48, 67, .08);
+      outline: 2px solid rgba(56, 189, 248, .22);
+    }
+
+    .mini-sign strong {
+      display: block;
+      font-size: 1.05rem;
+      margin-bottom: 4px;
+    }
+
+    .reward-card {
+      position: relative;
+      padding: 16px;
+      min-height: 250px;
+      display: grid;
+      align-content: space-between;
+      gap: 12px;
+      border-radius: 28px;
+      border: 3px solid #fff;
+      box-shadow: 0 9px 0 rgba(167, 139, 250, .14), 0 12px 24px rgba(39, 48, 67, .1);
+      overflow: hidden;
+    }
+
+    .reward-card.sweets {
+      background: linear-gradient(135deg, #fff, #ffe4ec);
+      outline: 2px solid rgba(255, 111, 145, .36);
+    }
+
+    .reward-card.toy {
+      background: linear-gradient(135deg, #fff, #dff7ff);
+      outline: 2px solid rgba(56, 189, 248, .34);
+    }
+
+    .reward-card.game {
+      background: linear-gradient(135deg, #fff, #ede9fe);
+      outline: 2px solid rgba(167, 139, 250, .34);
+    }
+
+    .reward-card::after {
+      content: "PAY";
+      position: absolute;
+      right: 12px;
+      top: 10px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: #fff;
+      color: #ef233c;
+      font-size: .72rem;
+      font-weight: 900;
+      box-shadow: 0 4px 0 rgba(39, 48, 67, .08);
+    }
+
+    .reward-emoji {
+      font-size: 2.4rem;
+    }
+
+    .reward-title {
+      font-size: 1.25rem;
+      font-weight: 900;
+      color: #273043;
+    }
+
+    .reward-cost {
+      color: #7c3aed;
+      font-weight: 900;
+    }
+
+    .pay-balance {
+      display: flex;
+      align-items: end;
+      gap: 6px;
+      color: #273043;
+      font-weight: 900;
+    }
+
+    .pay-balance strong {
+      font-size: clamp(2.2rem, 7vw, 3.5rem);
+      line-height: .9;
+      color: #ef233c;
+      text-shadow: 0 3px 0 rgba(255, 209, 102, .55);
+    }
+
+    .pay-form {
+      display: grid;
+      gap: 8px;
+    }
+
+    .pay-form label {
+      display: grid;
+      gap: 5px;
+      font-weight: 900;
+      color: #273043;
+    }
+
+    .pay-input {
+      width: 100%;
+      border: 3px solid #fff;
+      border-radius: 18px;
+      padding: 12px;
+      background: #fff;
+      color: #273043;
+      font-size: 1.1rem;
+      font-weight: 900;
+      box-shadow: inset 0 2px 0 rgba(255, 209, 102, .25);
+      outline: 2px solid rgba(255, 209, 102, .42);
+    }
+
+    .pay-message {
+      min-height: 1.3em;
+      font-size: .86rem;
+      font-weight: 900;
+      color: #64748b;
+    }
+
+    .pay-message.error { color: #ef233c; }
+    .pay-message.success { color: #118a5f; }
+
+    .reward-button {
+      min-height: 46px;
+      color: #fff;
+      background: linear-gradient(135deg, #ff6f91, #ff9f1c);
+      border: 3px solid #fff;
+      border-radius: 999px;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .3);
+      box-shadow: 0 6px 0 rgba(255, 111, 145, .2), 0 9px 18px rgba(39, 48, 67, .12);
+    }
+
+    .reward-button:disabled {
+      opacity: .45;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
+    .log-list {
+      display: grid;
+      gap: 8px;
+      max-height: 380px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .history-group-title {
+      display: inline-flex;
+      align-items: center;
+      width: fit-content;
+      margin: 6px 0 2px;
+      padding: 6px 12px;
+      border: 2px solid rgba(35, 50, 77, .12);
+      border-radius: 999px;
+      background: linear-gradient(135deg, #fff7c7, #ffe6f0);
+      color: #23324d;
+      font-size: .86rem;
+      font-weight: 900;
+      box-shadow: 0 5px 0 rgba(255, 209, 102, .28);
+    }
+
+    .log-item {
+      padding: 10px 12px;
+      font-weight: 800;
+    }
+
+    .pay-log-item {
+      border: 2px solid rgba(255, 209, 102, .75);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .78);
+      box-shadow: 0 6px 0 rgba(56, 189, 248, .14);
+    }
+
+    .pay-log-detail {
+      display: block;
+      margin-top: 4px;
+      color: #ef476f;
+      font-size: .82rem;
+      font-weight: 900;
+    }
+
+    .log-date {
+      display: block;
+      margin-top: 4px;
+      color: #64748b;
+      font-size: .78rem;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 22px;
+      transform: translateX(-50%) translateY(120px);
+      z-index: 20;
+      width: min(92vw, 520px);
+      padding: 14px 16px;
+      border-radius: 18px;
+      color: #23324d;
+      background: rgba(255, 255, 255, .96);
+      border: 4px solid #ffd166;
+      box-shadow: 0 15px 35px rgba(39, 48, 67, .24);
+      font-weight: 900;
+      text-align: center;
+      transition: transform .28s ease;
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(17, 24, 39, .55);
+    }
+
+    .modal-backdrop.hidden {
+      display: none;
+    }
+
+    .info-modal {
+      width: min(92vw, 520px);
+      border-radius: 22px;
+      border: 6px solid #111827;
+      background:
+        radial-gradient(circle at 10% 10%, rgba(255, 209, 102, .55), transparent 24%),
+        linear-gradient(135deg, #fff, #fff8d6);
+      box-shadow: 0 16px 0 rgba(17, 24, 39, .22);
+      overflow: hidden;
+    }
+
+    .info-modal header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 16px;
+      color: #fff;
+      background: linear-gradient(135deg, #ef233c, #273043);
+      border-bottom: 5px solid #ffd166;
+    }
+
+    .info-modal h3 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 900;
+    }
+
+    .modal-close {
+      width: 38px;
+      height: 38px;
+      border: 3px solid #111827;
+      border-radius: 12px;
+      background: #fff;
+      color: #111827;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .info-modal-body {
+      padding: 16px;
+      font-weight: 800;
+      line-height: 1.75;
+    }
+
+    .info-modal-body ul {
+      margin: 0;
+      padding-left: 1.2em;
+    }
+
+    .confetti {
+      position: fixed;
+      top: -18px;
+      width: 12px;
+      height: 18px;
+      border-radius: 4px;
+      z-index: 30;
+      animation: fall 1.35s linear forwards;
+    }
+
+    .marquee {
+      overflow: hidden;
+      white-space: nowrap;
+      border-radius: 16px;
+      color: #fff;
+      background: #273043;
+      border: 4px solid #ffd166;
+      padding: 8px 0;
+      font-weight: 900;
+    }
+
+    .marquee span {
+      display: inline-block;
+      padding-left: 100%;
+      animation: marquee 16s linear infinite;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .badge {
+      padding: 8px 10px;
+      border-radius: 999px;
+      background: #fff;
+      border: 3px solid #ffd166;
+      font-weight: 900;
+      box-shadow: 0 5px 0 rgba(67, 85, 121, .12);
+    }
+
+    @keyframes floaty {
+      0%, 100% { transform: translateY(0) rotate(-2deg); }
+      50% { transform: translateY(-12px) rotate(2deg); }
+    }
+
+    @keyframes mascotOrbit {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-7px); }
+    }
+
+    @keyframes logoDrift {
+      0%, 100% { transform: translateY(-50%) rotate(-3deg); }
+      50% { transform: translateY(calc(-50% - 7px)) rotate(4deg); }
+    }
+
+    @keyframes logoFloat {
+      0%, 100% { transform: translateY(0) rotate(-5deg); }
+      50% { transform: translateY(-7px) rotate(5deg); }
+    }
+
+    @keyframes twinkle {
+      0%, 100% { opacity: .35; transform: scale(.7) rotate(0deg); }
+      50% { opacity: 1; transform: scale(1.2) rotate(45deg); }
+    }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: translateY(8px) scale(.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    @keyframes wiggle {
+      0%, 100% { transform: rotate(-3deg); }
+      50% { transform: rotate(4deg); }
+    }
+
+    @keyframes marquee {
+      from { transform: translateX(0); }
+      to { transform: translateX(-100%); }
+    }
+
+    @keyframes fall {
+      to { transform: translateY(110vh) rotate(720deg); opacity: .1; }
+    }
+
+    @media (max-width: 780px) {
+      .hero { min-height: 372px; }
+      .logo-wrap { min-height: 150px; padding-top: 20px; }
+      .logo-title { gap: 0; }
+      .ticket-strip { left: 54px; right: 12px; }
+      .logo-burst { opacity: .86; }
+      .logo-ticket { right: 42px; top: 8px; }
+      .logo-coin { right: 10px; top: 44px; }
+      .subtitle { max-width: calc(100% - 112px); }
+      .status-bar { grid-template-columns: 1fr; }
+      .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .category-tabs, .point-row { grid-template-columns: 1fr; }
+      .roulette-dashboard { grid-template-columns: 1fr; }
+      .casino-table { grid-template-columns: 1fr; }
+      .wheel-wrap { min-height: 310px; }
+      .bet-buttons { grid-template-columns: repeat(5, minmax(42px, 1fr)); }
+      .casino-table::after { right: 10px; bottom: 8px; }
+      .mascot { right: 6px; bottom: 8px; width: clamp(128px, 34vw, 158px); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: .001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+      }
+      .wheel { transition-duration: .001ms; }
+    }
+  </style>
+</head>
+<body>
+  <svg class="vegas-skyline" viewBox="0 0 1200 170" preserveAspectRatio="none" aria-hidden="true">
+    <path fill="#31405a" d="M0 170V96h72V64h28v32h50V44h34v52h70V76h38v20h74V52h48v44h60V22h24v74h58V68h42v28h72V34h48v62h80V80h46v16h72V56h34v40h78V68h28v28h42v74z"/>
+    <path fill="#ffd166" d="M67 112h18v18H67zm94-2h18v18h-18zm110 12h18v18h-18zm120-28h18v18h-18zm104 30h18v18h-18zm144-22h18v18h-18zm118-36h18v18h-18zm92 56h18v18h-18zm132-34h18v18h-18zm96 28h18v18h-18z"/>
+  </svg>
+
+  <main class="stage">
+    <div class="main-shell">
+      <section class="hero">
+        <span class="sparkle"></span>
+        <span class="sparkle"></span>
+        <span class="sparkle"></span>
+        <div class="logo-wrap" aria-label="HAPICHIKE">
+          <div class="logo-burst" aria-hidden="true"></div>
+          <div class="ticket-strip" aria-hidden="true"></div>
+          <span class="logo-ticket" aria-hidden="true">TICKET</span>
+          <span class="logo-coin" aria-hidden="true">P</span>
+          <span class="logo-shine one" aria-hidden="true">✦</span>
+          <span class="logo-shine two" aria-hidden="true">✧</span>
+          <h1 class="logo-title">
+            <span class="logo-letter h-smile">H<span class="smile-mouth"></span></span>
+            <span class="logo-letter">A</span>
+            <span class="logo-letter">P<span class="p-star">★</span></span>
+            <span class="logo-letter i-spark">I</span>
+            <span class="logo-letter">C</span>
+            <span class="logo-letter">H<span class="logo-face">☺</span></span>
+            <span class="logo-letter i-spark">I</span>
+            <span class="logo-letter">K</span>
+            <span class="logo-letter">E</span>
+          </h1>
+        </div>
+        <p class="subtitle">お手伝いチケットをためて、ルーレットでごほうびポイントをためよう♪</p>
+        <svg class="mascot" viewBox="0 0 260 260" role="img" aria-label="スターコインをジャグリングするHAPICHIKEのマスコット">
+          <defs>
+            <filter id="mascotShadow" x="-20%" y="-20%" width="140%" height="150%">
+              <feDropShadow dx="0" dy="7" stdDeviation="4" flood-color="#111827" flood-opacity=".22"/>
+            </filter>
+          </defs>
+
+          <g class="mascot-orbit delay-two">
+            <circle cx="64" cy="66" r="22" fill="#ffd166" stroke="#111827" stroke-width="6"/>
+            <circle cx="64" cy="66" r="10" fill="#fff8b5" stroke="#ef233c" stroke-width="4"/>
+            <text x="64" y="72" text-anchor="middle" font-size="17" font-weight="900" fill="#111827">P</text>
+          </g>
+          <g class="mascot-orbit">
+            <path d="M129 21l8 17 19 2-14 13 4 19-17-10-17 10 4-19-14-13 19-2z" fill="#ffd166" stroke="#111827" stroke-width="6" stroke-linejoin="round"/>
+          </g>
+          <g class="mascot-orbit delay-one">
+            <path d="M181 51h44l-5 12 5 12h-44l5-12z" fill="#fff" stroke="#111827" stroke-width="6" stroke-linejoin="round"/>
+            <path d="M191 59h22" stroke="#ef233c" stroke-width="5" stroke-linecap="round"/>
+            <path d="M191 68h16" stroke="#ffd166" stroke-width="5" stroke-linecap="round"/>
+          </g>
+
+          <path d="M70 110c12-36 103-36 120 0" fill="none" stroke="#111827" stroke-width="7" stroke-linecap="round" stroke-dasharray="6 14" opacity=".7"/>
+
+          <g filter="url(#mascotShadow)">
+            <ellipse cx="130" cy="220" rx="62" ry="15" fill="#111827" opacity=".16"/>
+            <path d="M91 130c-18 18-30 39-31 61 20 20 118 20 140 0-1-23-14-44-33-62z" fill="#ef233c" stroke="#111827" stroke-width="8" stroke-linejoin="round"/>
+            <path d="M103 134c8 10 18 16 28 16s21-6 29-17c9 14 17 35 18 56-20 12-74 12-95 0 1-20 9-41 20-55z" fill="#fff" stroke="#111827" stroke-width="5" stroke-linejoin="round"/>
+            <path d="M110 151l20 16 21-16 8 21-29 14-29-14z" fill="#273043" stroke="#111827" stroke-width="5" stroke-linejoin="round"/>
+            <circle cx="130" cy="176" r="7" fill="#ffd166" stroke="#111827" stroke-width="4"/>
+            <circle cx="130" cy="197" r="7" fill="#ffd166" stroke="#111827" stroke-width="4"/>
+
+            <path d="M78 150c-23 2-36 16-38 38" fill="none" stroke="#111827" stroke-width="18" stroke-linecap="round"/>
+            <path d="M79 150c-23 2-35 16-38 38" fill="none" stroke="#ffd166" stroke-width="10" stroke-linecap="round"/>
+            <circle cx="39" cy="190" r="15" fill="#fff" stroke="#111827" stroke-width="7"/>
+
+            <path d="M182 150c23 2 36 16 38 38" fill="none" stroke="#111827" stroke-width="18" stroke-linecap="round"/>
+            <path d="M181 150c23 2 35 16 38 38" fill="none" stroke="#ffd166" stroke-width="10" stroke-linecap="round"/>
+            <circle cx="221" cy="190" r="15" fill="#fff" stroke="#111827" stroke-width="7"/>
+
+            <circle cx="130" cy="104" r="56" fill="#fff8d6" stroke="#111827" stroke-width="8"/>
+            <path d="M82 98c11-37 82-54 103-6-24-10-58-9-103 6z" fill="#ffd166" stroke="#111827" stroke-width="7" stroke-linejoin="round"/>
+            <path d="M96 65h68l-10-28h-48z" fill="#273043" stroke="#111827" stroke-width="7" stroke-linejoin="round"/>
+            <rect x="99" y="57" width="62" height="17" rx="8" fill="#ef233c" stroke="#111827" stroke-width="5"/>
+            <path d="M120 38h20l-10-16z" fill="#ffd166" stroke="#111827" stroke-width="5" stroke-linejoin="round"/>
+            <circle cx="110" cy="105" r="7" fill="#111827"/>
+            <circle cx="151" cy="105" r="7" fill="#111827"/>
+            <circle cx="94" cy="122" r="8" fill="#ff8fab" opacity=".85"/>
+            <circle cx="166" cy="122" r="8" fill="#ff8fab" opacity=".85"/>
+            <path d="M111 128c13 15 28 15 40 0" fill="none" stroke="#111827" stroke-width="7" stroke-linecap="round"/>
+            <path d="M132 113l6 9h-12z" fill="#ef233c" stroke="#111827" stroke-width="4" stroke-linejoin="round"/>
+          </g>
+
+          <path d="M51 35l5 11 12 1-9 8 3 12-11-6-11 6 3-12-9-8 12-1z" fill="#fff" stroke="#111827" stroke-width="4" stroke-linejoin="round"/>
+          <path d="M210 98l4 8 9 1-7 6 2 9-8-5-8 5 2-9-7-6 9-1z" fill="#ffd166" stroke="#111827" stroke-width="4" stroke-linejoin="round"/>
+        </svg>
+      </section>
+
+      <div class="marquee"><span>WELCOME TO HAPICHIKE ★ きょうのチャレンジ ★ ハッピーチケット ★ たのしいルーレット ★ がんばりバッジ ★</span></div>
+
+      <section class="status-bar" aria-label="ステータス">
+        <div class="meter">
+          <div class="meter-label"><span class="chip">T</span>チケット</div>
+          <div class="meter-value" id="coinCount">0</div>
+        </div>
+        <div class="meter">
+          <div class="meter-label">今日のクリア</div>
+          <div class="meter-value"><span id="doneCount">0</span> / <span id="taskTotal">0</span></div>
+        </div>
+        <div class="meter">
+          <div class="meter-label">がんばりレベル</div>
+          <div class="meter-value" id="levelText">1</div>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="メニュー">
+        <button class="tab active" data-tab="tasks">お手伝い</button>
+        <button class="tab" data-tab="roulette">ルーレット</button>
+        <button class="tab" data-tab="rewards">ごほうび</button>
+        <button class="tab" data-tab="history">きろく</button>
+      </nav>
+
+      <section class="panel active" id="tasks">
+        <h2 class="panel-title"><span>🎟️</span>今日のお手伝い</h2>
+        <div class="task-tools">
+          <button class="primary" id="addTaskBtn">あたらしく追加</button>
+          <button class="secondary" id="resetDayBtn">今日の状態をリセット</button>
+        </div>
+        <div class="task-grid" id="taskList"></div>
+        <div class="badge-row" id="badgeRow"></div>
+      </section>
+
+      <section class="panel" id="roulette">
+        <h2 class="panel-title"><span>🎡</span>ごほうびルーレット</h2>
+        <div class="category-tabs" id="categoryTabs" aria-label="ルーレットのジャンル">
+          <button class="category-tab active" data-category="snack">🍪 お菓子</button>
+          <button class="category-tab" data-category="toy">🧸 おもちゃ</button>
+          <button class="category-tab" data-category="game">🎮 ゲーム</button>
+        </div>
+        <div class="roulette-dashboard">
+          <div class="roulette-stat">🎟️ 所持チケット<span id="ticketCountDisplay">0</span></div>
+          <div class="roulette-stat">🎯 選択中<span id="activeCategoryDisplay">お菓子</span></div>
+          <div class="roulette-stat">🔥 BET<span id="activeBetDisplay">1</span></div>
+        </div>
+        <div class="point-row" id="pointRow"></div>
+        <div class="casino-table">
+          <div class="wheel-wrap">
+            <div class="pointer"></div>
+            <div class="wheel" id="wheel"></div>
+            <button class="spin-button" id="spinBtn">まわす</button>
+          </div>
+          <div class="roulette-side">
+            <div class="bet-panel">
+              <strong>BETをえらぶ</strong>
+              <div class="bet-buttons" id="betButtons" aria-label="BET数">
+                <button class="bet-button active" data-bet="1">1</button>
+                <button class="bet-button" data-bet="2">2</button>
+                <button class="bet-button" data-bet="3">3</button>
+                <button class="bet-button" data-bet="4">4</button>
+                <button class="bet-button" data-bet="5">5</button>
+              </div>
+            </div>
+            <div class="info-buttons">
+              <button class="info-button" data-info="how">🎟️ 遊び方</button>
+              <button class="info-button" data-info="rules">🛡️ ルール</button>
+            </div>
+            <div class="mini-sign">
+              <strong>今回の結果</strong>
+              <span id="luckyText">まだ回していません</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="rewards">
+        <div class="shop-hero">
+          <h2 class="shop-title">ハピチケSHOP</h2>
+          <p class="shop-subtitle">ルーレットでためたPAYポイントを、家族と相談してごほうびに使おう。</p>
+        </div>
+        <div class="reward-grid" id="rewardList"></div>
+      </section>
+
+      <section class="panel" id="history">
+        <h2 class="panel-title"><span>🏆</span>がんばりきろく</h2>
+        <div class="tool-row">
+          <button class="secondary" id="clearHistoryBtn">きろくを消す</button>
+        </div>
+        <div class="log-list" id="historyList"></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <div class="modal-backdrop hidden" id="taskEditModal" role="dialog" aria-modal="true" aria-labelledby="taskEditTitle">
+    <section class="info-modal">
+      <header>
+        <h3 id="taskEditTitle">お手伝いをへんしゅう</h3>
+        <button class="modal-close" id="taskEditClose" aria-label="閉じる">×</button>
+      </header>
+      <form class="info-modal-body edit-form" id="taskEditForm">
+        <label>
+          アイコン
+          <input id="editTaskIcon" maxlength="4" autocomplete="off">
+        </label>
+        <label>
+          お手伝い名
+          <input id="editTaskTitle" autocomplete="off" required>
+        </label>
+        <label>
+          難易度
+          <select id="editTaskDifficulty">
+            <option value="easy">かんたん</option>
+            <option value="normal">ふつう</option>
+            <option value="hard">むずかしい</option>
+          </select>
+        </label>
+        <label>
+          もらえるチケット
+          <select id="editTaskReward">
+            <option value="1">1枚</option>
+            <option value="2">2枚</option>
+            <option value="3">3枚</option>
+            <option value="4">4枚</option>
+            <option value="5">5枚</option>
+          </select>
+        </label>
+        <div class="edit-actions">
+          <button class="secondary" type="button" id="deleteTaskBtn">削除</button>
+          <button class="primary" type="submit">保存</button>
+        </div>
+      </form>
+    </section>
+  </div>
+  <div class="modal-backdrop hidden" id="infoModal" role="dialog" aria-modal="true" aria-labelledby="infoModalTitle">
+    <section class="info-modal">
+      <header>
+        <h3 id="infoModalTitle">遊び方</h3>
+        <button class="modal-close" id="infoModalClose" aria-label="閉じる">×</button>
+      </header>
+      <div class="info-modal-body" id="infoModalBody"></div>
+    </section>
+  </div>
+
+  <script>
+    const storageKey = "kidsVegasCasino.v1";
+    const defaultTasks = [
+      { id: "feed-pet", icon: "🐟", title: "生き物のごはんあつめ", difficulty: "easy", ticketReward: 1, status: "idle", isDefault: true },
+      { id: "toy-clean", icon: "🧸", title: "おもちゃの片づけ", difficulty: "easy", ticketReward: 1, status: "idle", isDefault: true },
+      { id: "laundry-carry", icon: "🧺", title: "せんたくものをはこぶ", difficulty: "easy", ticketReward: 1, status: "idle", isDefault: true },
+      { id: "wipe-table", icon: "✨", title: "テーブルをふく", difficulty: "normal", ticketReward: 2, status: "idle", isDefault: true },
+      { id: "dish-help", icon: "🍽️", title: "食器洗いのお手伝い", difficulty: "normal", ticketReward: 2, status: "idle", isDefault: true },
+      { id: "vacuum-help", icon: "🧹", title: "そうじきのお手伝い", difficulty: "hard", ticketReward: 3, status: "idle", isDefault: true }
+    ];
+
+    const difficultyLabels = {
+      easy: "かんたん",
+      normal: "ふつう",
+      hard: "むずかしい"
+    };
+
+    const categories = {
+      snack: { label: "お菓子", emoji: "🍪", pointName: "お菓子P" },
+      toy: { label: "おもちゃ", emoji: "🧸", pointName: "おもちゃP" },
+      game: { label: "ゲーム", emoji: "🎮", pointName: "ゲームP" }
+    };
+
+    const betTables = {
+      1: [
+        { points: 1, weight: 22, tone: "plus" },
+        { points: 2, weight: 14, tone: "plus" },
+        { points: 3, weight: 7, tone: "rare" },
+        { points: 0, weight: 16, tone: "safe" },
+        { points: -1, weight: 9, tone: "minus" }
+      ],
+      2: [
+        { points: 2, weight: 22, tone: "plus" },
+        { points: 4, weight: 13, tone: "plus" },
+        { points: 6, weight: 6, tone: "rare" },
+        { points: 0, weight: 16, tone: "safe" },
+        { points: -2, weight: 9, tone: "minus" }
+      ],
+      3: [
+        { points: 3, weight: 21, tone: "plus" },
+        { points: 5, weight: 13, tone: "plus" },
+        { points: 8, weight: 6, tone: "rare" },
+        { points: 0, weight: 15, tone: "safe" },
+        { points: -2, weight: 9, tone: "minus" },
+        { points: -4, weight: 4, tone: "minus rare" }
+      ],
+      4: [
+        { points: 4, weight: 21, tone: "plus" },
+        { points: 8, weight: 12, tone: "plus" },
+        { points: 12, weight: 5, tone: "rare" },
+        { points: 0, weight: 15, tone: "safe" },
+        { points: -4, weight: 9, tone: "minus" },
+        { points: -6, weight: 4, tone: "minus rare" }
+      ],
+      5: [
+        { points: 5, weight: 21, tone: "plus" },
+        { points: 10, weight: 12, tone: "plus" },
+        { points: 15, weight: 6, tone: "rare" },
+        { points: 20, weight: 3, tone: "rare" },
+        { points: 0, weight: 15, tone: "safe" },
+        { points: -5, weight: 9, tone: "minus" },
+        { points: -10, weight: 4, tone: "minus rare" }
+      ]
+    };
+
+    const pointColors = {
+      minus: "#ef233c",
+      zero: "#9ca3af",
+      plusOne: "#ffd166",
+      plusTwo: "#22c55e",
+      plusHigh: "#38bdf8"
+    };
+
+    const infoContents = {
+      how: {
+        title: "🎟️ 遊び方",
+        body: `
+          <ul>
+            <li>お手伝いをクリアすると、チケットが1まいもらえます。</li>
+            <li>お菓子・おもちゃ・ゲームからジャンルを選びます。</li>
+            <li>BETを1〜5から選んで「まわす」を押します。</li>
+            <li>BETの数だけチケットを使います。</li>
+            <li>出たマスのポイントが、選んだジャンルに入ります。</li>
+          </ul>
+        `
+      },
+      rules: {
+        title: "🛡️ たいせつなルール",
+        body: `
+          <ul>
+            <li>本物のお金・課金・賭けごとはありません。</li>
+            <li>これは、お手伝いチケットで遊ぶごほうびルーレットです。</li>
+            <li>マイナスが出ても、ポイントは0より下にはなりません。</li>
+            <li>BETが大きいほど、増えるポイントも減るポイントも大きくなります。</li>
+            <li>ごほうびは家族と相談して楽しく使いましょう。</li>
+          </ul>
+        `
+      }
+    };
+
+    const payTypes = [
+      { id: "sweets", category: "snack", label: "SweetsPAY🍩", icon: "🍩", description: "お菓子のごほうびに使えるよ" },
+      { id: "toy", category: "toy", label: "ToyPAY🤖", icon: "🤖", description: "おもちゃのごほうびに使えるよ" },
+      { id: "game", category: "game", label: "GamePAY🎮", icon: "🎮", description: "ゲームのごほうびに使えるよ" }
+    ];
+
+    const icons = ["🧹", "📚", "🪥", "🥗", "😊", "🧺", "🌱", "🧽", "📝", "🎵"];
+    let state = loadState();
+    let activeCategory = "snack";
+    let activeBet = 1;
+    let rotation = 0;
+    let spinning = false;
+    let editingTaskId = null;
+    let usePayAmount = { sweets: "", toy: "", game: "" };
+
+    function loadState() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey));
+        if (saved && Array.isArray(saved.tasks)) return normalizeState(saved);
+      } catch (error) {}
+      return normalizeState({ coins: 0, tasks: defaultTasks, history: [], payLogs: [], badges: [] });
+    }
+
+    function normalizeState(saved) {
+      return {
+        coins: Number(saved.coins) || 0,
+        tasks: Array.isArray(saved.tasks) ? normalizeTasks(saved.tasks) : defaultTasks.map(task => ({ ...task })),
+        history: Array.isArray(saved.history) ? saved.history : [],
+        payLogs: Array.isArray(saved.payLogs) ? saved.payLogs : [],
+        badges: Array.isArray(saved.badges) ? saved.badges : [],
+        points: {
+          snack: Number(saved.points?.snack) || 0,
+          toy: Number(saved.points?.toy) || 0,
+          game: Number(saved.points?.game) || 0
+        }
+      };
+    }
+
+    function normalizeTasks(tasks) {
+      const oldDefaultNames = ["へやを 5分 かたづける", "しゅくだいを 1つ すすめる", "はみがきをていねいにする", "ごはんのじゅんびを手つだう", "家族にありがとうを言う"];
+      const looksLikeOldDefault = tasks.length <= 5 && tasks.every(task => !task.title && oldDefaultNames.includes(task.name));
+      if (looksLikeOldDefault) return defaultTasks.map(task => ({ ...task }));
+      return tasks.map(normalizeTask);
+    }
+
+    function normalizeTask(task, index = 0) {
+      if (task.title) {
+        return {
+          id: task.id || `task-${Date.now()}-${index}`,
+          icon: task.icon || "⭐",
+          title: task.title,
+          difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
+          ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+          status: ["idle", "inProgress", "done"].includes(task.status) ? task.status : (task.done ? "done" : "idle"),
+          isDefault: Boolean(task.isDefault)
+        };
+      }
+
+      return {
+        id: `legacy-${Date.now()}-${index}`,
+        icon: task.icon || "⭐",
+        title: task.name || "新しいお手伝い",
+        difficulty: "easy",
+        ticketReward: 1,
+        status: task.done ? "done" : "idle",
+        isDefault: false
+      };
+    }
+
+    function saveState() {
+      localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    function todayString() {
+      return new Intl.DateTimeFormat("ja-JP", {
+        month: "numeric",
+        day: "numeric",
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date());
+    }
+
+    function addHistory(text) {
+      state.history.unshift({ text, date: todayString() });
+      state.history = state.history.slice(0, 40);
+      saveState();
+    }
+
+    function addPayLog(pay, amount, before, after) {
+      state.payLogs.unshift({
+        id: `pay-${Date.now()}`,
+        payId: pay.id,
+        label: pay.label,
+        category: pay.category,
+        amount,
+        before,
+        after,
+        date: todayString()
+      });
+      state.payLogs = state.payLogs.slice(0, 50);
+    }
+
+    function render() {
+      renderTasks();
+      renderRewards();
+      renderHistory();
+      renderWheel();
+      renderPoints();
+      updateStats();
+    }
+
+    function updateStats() {
+      const done = state.tasks.filter(task => task.status === "done").length;
+      document.getElementById("coinCount").textContent = state.coins;
+      document.getElementById("ticketCountDisplay").textContent = state.coins;
+      document.getElementById("activeCategoryDisplay").textContent = categories[activeCategory].label;
+      document.getElementById("activeBetDisplay").textContent = activeBet;
+      document.getElementById("spinBtn").disabled = state.coins < activeBet || spinning;
+      document.getElementById("doneCount").textContent = done;
+      document.getElementById("taskTotal").textContent = state.tasks.length;
+      document.getElementById("levelText").textContent = Math.max(1, Math.floor((state.history.length + state.coins) / 6) + 1);
+      renderBadges(done);
+    }
+
+    function renderPoints() {
+      const row = document.getElementById("pointRow");
+      row.innerHTML = Object.entries(categories).map(([key, category]) => `
+        <div class="point-pill">${category.emoji} ${category.pointName}<strong>${state.points[key]}</strong></div>
+      `).join("");
+
+      document.querySelectorAll(".category-tab").forEach(button => {
+        button.classList.toggle("active", button.dataset.category === activeCategory);
+      });
+
+      document.querySelectorAll(".bet-button").forEach(button => {
+        const bet = Number(button.dataset.bet);
+        button.classList.toggle("active", bet === activeBet);
+        button.disabled = bet > state.coins && bet !== activeBet;
+      });
+    }
+
+    function renderTasks() {
+      const list = document.getElementById("taskList");
+      list.innerHTML = "";
+      state.tasks.forEach(task => {
+        const card = document.createElement("article");
+        card.className = `task-card ${task.status === "inProgress" ? "in-progress" : ""} ${task.status === "done" ? "done" : ""}`;
+        card.innerHTML = `
+          <div class="task-top">
+            <div class="task-art">${escapeHtml(task.icon)}</div>
+            <div>
+              <div class="task-name-display">${escapeHtml(task.title)}</div>
+              <div class="task-meta">
+                <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
+                <span class="status-badge ${task.status}">${getTaskStatusLabel(task.status)}</span>
+              </div>
+            </div>
+          </div>
+          <div class="ticket-reward">
+            <span class="ticket-icons">${renderTicketIcons(task.ticketReward)}</span>
+            <span>チケット ${task.ticketReward}枚</span>
+          </div>
+          <div class="task-actions">
+            <button class="task-action start" data-action="start" ${task.status !== "idle" ? "disabled" : ""}>はじめる</button>
+            <button class="task-action finish" data-action="finish" ${task.status !== "inProgress" ? "disabled" : ""}>おわる</button>
+            <button class="task-action edit" data-action="edit">へんしゅう</button>
+          </div>
+        `;
+        card.querySelector('[data-action="start"]').addEventListener("click", () => startTask(task.id));
+        card.querySelector('[data-action="finish"]').addEventListener("click", () => finishTask(task.id));
+        card.querySelector('[data-action="edit"]').addEventListener("click", () => openTaskEditor(task.id));
+        list.appendChild(card);
+      });
+    }
+
+    function getTaskStatusLabel(status) {
+      if (status === "inProgress") return "作業中！";
+      if (status === "done") return "かんりょう！";
+      return "まだやってない";
+    }
+
+    function renderTicketIcons(count) {
+      return "🎫".repeat(Math.min(5, Math.max(1, Number(count) || 1)));
+    }
+
+    function renderBadges(done) {
+      const badgeRow = document.getElementById("badgeRow");
+      const badges = [];
+      if (done >= 1) badges.push("はじめの一歩");
+      if (done >= 3) badges.push("チケット見習い");
+      if (done >= state.tasks.length && state.tasks.length > 0) badges.push("本日のスター");
+      if (state.coins >= 10) badges.push("チケット名人");
+      state.badges = Array.from(new Set([...state.badges, ...badges]));
+      badgeRow.innerHTML = state.badges.map(badge => `<span class="badge">🏅 ${escapeHtml(badge)}</span>`).join("");
+    }
+
+    function renderRewards() {
+      const list = document.getElementById("rewardList");
+      list.innerHTML = payTypes.map(pay => {
+        const points = state.points[pay.category] || 0;
+        const amount = usePayAmount[pay.id] || "";
+        return `
+        <article class="reward-card ${pay.id}">
+          <div>
+            <div class="reward-emoji">${pay.icon}</div>
+            <div class="reward-title">${pay.label}</div>
+            <div class="reward-cost">${pay.description}</div>
+          </div>
+          <div class="pay-balance">
+            <span>もっているポイント</span>
+            <strong>${points}</strong>
+            <span>P</span>
+          </div>
+          <div class="pay-form">
+            <label>
+              つかうポイント
+              <input class="pay-input" inputmode="numeric" pattern="[0-9]*" min="1" max="${points}" type="number" value="${escapeHtml(amount)}" data-pay-input="${pay.id}" placeholder="例：5">
+            </label>
+            <div class="pay-message" id="payMessage_${pay.id}"></div>
+            <button class="reward-button" data-pay-use="${pay.id}" ${points <= 0 ? "disabled" : ""}>ポイントをつかう</button>
+          </div>
+        </article>
+      `;
+      }).join("");
+
+      list.querySelectorAll("[data-pay-input]").forEach(input => {
+        input.addEventListener("input", () => {
+          usePayAmount[input.dataset.payInput] = input.value.replace(/[^\d]/g, "");
+          input.value = usePayAmount[input.dataset.payInput];
+        });
+      });
+
+      list.querySelectorAll("[data-pay-use]").forEach(button => {
+        button.addEventListener("click", () => usePayPoints(button.dataset.payUse));
+      });
+    }
+
+    function renderHistory() {
+      const list = document.getElementById("historyList");
+      const payLogs = state.payLogs || [];
+      const payLogHtml = payLogs.length
+        ? payLogs.map(item => `
+          <div class="log-item pay-log-item">
+            ${escapeHtml(item.label)}を${Number(item.amount) || 0}Pつかったよ
+            <span class="pay-log-detail">残り ${Number(item.before) || 0}P → ${Number(item.after) || 0}P</span>
+            <span class="log-date">${escapeHtml(item.date || "")}</span>
+          </div>
+        `).join("")
+        : `<div class="log-item">PAY交換ログはまだありません。</div>`;
+      const historyHtml = state.history.length
+        ? state.history.map(item => `
+          <div class="log-item">${escapeHtml(item.text)}<span class="log-date">${escapeHtml(item.date)}</span></div>
+        `).join("")
+        : `<div class="log-item">まだきろくはありません。お手伝いをクリアして、最初のチケットを集めよう。</div>`;
+
+      list.innerHTML = `
+        <div class="history-group-title">🛍️ PAY交換ログ</div>
+        ${payLogHtml}
+        <div class="history-group-title">🏆 ぜんぶのきろく</div>
+        ${historyHtml}
+      `;
+    }
+
+    function getSegmentIcon(points) {
+      if (points > 12) return "🎉";
+      if (points > 0) return "⭐";
+      if (points === 0) return "🎟️";
+      return "💫";
+    }
+
+    function getSegmentColor(segment) {
+      if (segment.points < 0) return pointColors.minus;
+      if (segment.points === 0) return pointColors.zero;
+      if (segment.points === 1) return pointColors.plusOne;
+      if (segment.points === 2) return pointColors.plusTwo;
+      return pointColors.plusHigh;
+    }
+
+    function getResultClass(points) {
+      if (points > 0) return "result-good";
+      if (points < 0) return "result-minus";
+      return "result-miss";
+    }
+
+    function getResultMessage(category, rawPoints, before, after) {
+      if (rawPoints > 0) return `やったね！ ${category.pointName} ${formatPoints(rawPoints)}！ ${before} → ${after}`;
+      if (rawPoints < 0) return `ざんねん、次はがんばろう！ ${category.pointName} ${formatPoints(rawPoints)} / ${before} → ${after}`;
+      return `今回は0P。でもチケットが1まい戻ってきたよ！ ${before} → ${after}`;
+    }
+
+    function getCurrentSegments() {
+      return betTables[activeBet].map((segment, index) => ({
+        ...segment,
+        id: index,
+        label: segment.points > 0 ? `+${segment.points}P` : `${segment.points}P`,
+        icon: getSegmentIcon(segment.points),
+        color: getSegmentColor(segment)
+      }));
+    }
+
+    function formatPoints(points) {
+      return points > 0 ? `+${points}P` : `${points}P`;
+    }
+
+    function renderWheel() {
+      const wheel = document.getElementById("wheel");
+      wheel.querySelectorAll(".wheel-label").forEach(label => label.remove());
+      const segments = getCurrentSegments();
+      const totalWeight = segments.reduce((sum, segment) => sum + segment.weight, 0);
+      let currentDeg = 0;
+      const gradients = [];
+
+      segments.forEach((segment, index) => {
+        const size = segment.weight / totalWeight * 360;
+        const endDeg = currentDeg + size;
+        gradients.push(`${segment.color} ${currentDeg.toFixed(2)}deg ${endDeg.toFixed(2)}deg`);
+        const label = document.createElement("div");
+        label.className = "wheel-label";
+        const labelDeg = currentDeg + size / 2 - 90;
+        label.style.transform = `rotate(${labelDeg.toFixed(2)}deg) translate(-4px, -50%)`;
+        label.innerHTML = `${segment.icon}<br>${formatPoints(segment.points)}`;
+        wheel.appendChild(label);
+        currentDeg = endDeg;
+      });
+      wheel.style.background = `conic-gradient(${gradients.join(", ")})`;
+    }
+
+    function createResultSegmentHtml(segment) {
+      return `
+        <div class="segment-chip ${segment.tone}" style="border-color: ${segment.color};">
+          <span>出たマス</span>
+          <span>${segment.icon} ${formatPoints(segment.points)}</span>
+        </div>
+      `;
+    }
+
+    function weightedPick(segments) {
+      const totalWeight = segments.reduce((sum, segment) => sum + segment.weight, 0);
+      let roll = Math.random() * totalWeight;
+      let startWeight = 0;
+      for (const segment of segments) {
+        if (roll < segment.weight) {
+          return { segment, startWeight, totalWeight };
+        }
+        roll -= segment.weight;
+        startWeight += segment.weight;
+      }
+      return { segment: segments[segments.length - 1], startWeight: totalWeight - segments[segments.length - 1].weight, totalWeight };
+    }
+
+    function startTask(taskId) {
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!task || task.status !== "idle") return;
+      task.status = "inProgress";
+      addHistory(`「${task.title}」をはじめました。`);
+      saveState();
+      render();
+      showToast("作業中になりました。終わったら「おわる」を押してね。");
+    }
+
+    function finishTask(taskId) {
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!task || task.status !== "inProgress") return;
+      task.status = "done";
+      state.coins += task.ticketReward;
+      addHistory(`「${task.title}」を完了。チケット +${task.ticketReward}`);
+      saveState();
+      render();
+      burstConfetti();
+      showToast(`やったね！チケット${task.ticketReward}枚ゲット！`);
+    }
+
+    function addTask() {
+      const task = {
+        id: `task-${Date.now()}`,
+        icon: icons[state.tasks.length % icons.length],
+        title: "新しいお手伝い",
+        difficulty: "easy",
+        ticketReward: 1,
+        status: "idle",
+        isDefault: false
+      };
+      state.tasks.push(task);
+      saveState();
+      render();
+      openTaskEditor(task.id);
+    }
+
+    function resetDay() {
+      state.tasks = state.tasks.map(task => ({ ...task, status: "idle" }));
+      addHistory("今日のお手伝い状態をリセットしました。");
+      saveState();
+      render();
+      showToast("今日のお手伝いをリセットしました。");
+    }
+
+    function spinWheel() {
+      if (spinning) return;
+      if (state.coins < activeBet) {
+        showToast(`チケットがあと ${activeBet - state.coins} まい必要です。お手伝いで集めよう。`);
+        return;
+      }
+      spinning = true;
+      state.coins -= activeBet;
+      updateStats();
+      const segments = getCurrentSegments();
+      const picked = weightedPick(segments);
+      const segmentSize = picked.segment.weight / picked.totalWeight * 360;
+      const startDeg = picked.startWeight / picked.totalWeight * 360;
+      const centerDeg = startDeg + segmentSize / 2;
+      const target = 360 - centerDeg;
+      const currentMod = ((rotation % 360) + 360) % 360;
+      rotation += 1440 + ((target - currentMod + 360) % 360);
+      document.getElementById("wheel").style.transform = `rotate(${rotation}deg)`;
+      setTimeout(() => {
+        const category = categories[activeCategory];
+        const before = state.points[activeCategory];
+        const after = Math.max(0, before + picked.segment.points);
+        const actualChange = after - before;
+        state.points[activeCategory] = after;
+        const ticketBonus = picked.segment.points === 0 ? 1 : 0;
+        if (ticketBonus) state.coins += ticketBonus;
+        const resultBox = document.getElementById("luckyText");
+        resultBox.className = getResultClass(picked.segment.points);
+        resultBox.innerHTML = `
+          <span>${category.emoji} ${getResultMessage(category, picked.segment.points, before, after)}</span>
+          ${createResultSegmentHtml(picked.segment)}
+        `;
+        addHistory(`${category.label}ルーレット BET${activeBet}: ${formatPoints(picked.segment.points)}（実際の変化 ${formatPoints(actualChange)}${ticketBonus ? " / チケット +1" : ""}）`);
+        saveState();
+        spinning = false;
+        render();
+        if (picked.segment.points > 0) burstConfetti();
+        if (picked.segment.points > 0) {
+          showToast(`${category.pointName} ${formatPoints(picked.segment.points)}！`);
+        } else if (picked.segment.points < 0) {
+          showToast(`ざんねん、${category.pointName} ${formatPoints(picked.segment.points)}。次はがんばろう！`);
+        } else {
+          showToast("今回は0P。チケットが1まい戻ってきたよ！");
+        }
+      }, 3700);
+    }
+
+    function setPayMessage(payId, message, type = "") {
+      const messageEl = document.getElementById(`payMessage_${payId}`);
+      if (!messageEl) return;
+      messageEl.textContent = message;
+      messageEl.className = `pay-message ${type}`;
+    }
+
+    function usePayPoints(payId) {
+      const pay = payTypes.find(item => item.id === payId);
+      if (!pay) return;
+      const amount = Number(usePayAmount[payId]);
+      const current = state.points[pay.category] || 0;
+
+      if (!usePayAmount[payId]) {
+        setPayMessage(payId, "つかうポイントを入力してね", "error");
+        return;
+      }
+
+      if (!Number.isInteger(amount) || amount <= 0) {
+        setPayMessage(payId, "1以上の数字を入れてね", "error");
+        return;
+      }
+
+      if (amount > current) {
+        setPayMessage(payId, "ポイントがたりないよ", "error");
+        return;
+      }
+
+      const nextPoints = current - amount;
+      state.points[pay.category] = nextPoints;
+      addPayLog(pay, amount, current, nextPoints);
+      usePayAmount[payId] = "";
+      addHistory(`${pay.label}を${amount}Pつかいました。`);
+      saveState();
+      render();
+      setPayMessage(payId, `${pay.label}を${amount}Pつかったよ！`, "success");
+      burstConfetti();
+      showToast(`${pay.label}を${amount}Pつかったよ！`);
+    }
+
+    function clearHistory() {
+      state.history = [];
+      state.payLogs = [];
+      state.badges = [];
+      saveState();
+      render();
+      showToast("きろくを消しました。");
+    }
+
+    function openTaskEditor(taskId) {
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!task) return;
+      editingTaskId = taskId;
+      document.getElementById("editTaskIcon").value = task.icon;
+      document.getElementById("editTaskTitle").value = task.title;
+      document.getElementById("editTaskDifficulty").value = task.difficulty;
+      document.getElementById("editTaskReward").value = String(task.ticketReward);
+      document.getElementById("taskEditModal").classList.remove("hidden");
+    }
+
+    function closeTaskEditor() {
+      document.getElementById("taskEditModal").classList.add("hidden");
+      editingTaskId = null;
+    }
+
+    function saveTaskEditor(event) {
+      event.preventDefault();
+      const task = state.tasks.find(item => item.id === editingTaskId);
+      if (!task) return;
+      task.icon = document.getElementById("editTaskIcon").value.trim() || "⭐";
+      task.title = document.getElementById("editTaskTitle").value.trim() || "新しいお手伝い";
+      task.difficulty = document.getElementById("editTaskDifficulty").value;
+      task.ticketReward = Math.min(5, Math.max(1, Number(document.getElementById("editTaskReward").value) || 1));
+      saveState();
+      render();
+      closeTaskEditor();
+      showToast("お手伝いを保存しました。");
+    }
+
+    function deleteEditingTask() {
+      if (!editingTaskId) return;
+      state.tasks = state.tasks.filter(task => task.id !== editingTaskId);
+      saveState();
+      render();
+      closeTaskEditor();
+      showToast("お手伝いを削除しました。");
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove("show"), 2600);
+    }
+
+    function openInfoModal(type) {
+      const content = infoContents[type];
+      if (!content) return;
+      document.getElementById("infoModalTitle").textContent = content.title;
+      document.getElementById("infoModalBody").innerHTML = content.body;
+      document.getElementById("infoModal").classList.remove("hidden");
+    }
+
+    function closeInfoModal() {
+      document.getElementById("infoModal").classList.add("hidden");
+    }
+
+    function burstConfetti() {
+      const colors = ["#ff6f91", "#ffd166", "#06b6d4", "#7c3aed", "#5ee7a5", "#ff9f1c"];
+      for (let i = 0; i < 42; i++) {
+        const bit = document.createElement("span");
+        bit.className = "confetti";
+        bit.style.left = `${Math.random() * 100}vw`;
+        bit.style.background = colors[i % colors.length];
+        bit.style.animationDelay = `${Math.random() * .18}s`;
+        bit.style.transform = `rotate(${Math.random() * 180}deg)`;
+        document.body.appendChild(bit);
+        setTimeout(() => bit.remove(), 1600);
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    document.querySelectorAll(".tab").forEach(button => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach(panel => panel.classList.remove("active"));
+        button.classList.add("active");
+        document.getElementById(button.dataset.tab).classList.add("active");
+      });
+    });
+
+    document.querySelectorAll(".category-tab").forEach(button => {
+      button.addEventListener("click", () => {
+        if (spinning) return;
+        activeCategory = button.dataset.category;
+        const resultBox = document.getElementById("luckyText");
+        resultBox.className = "";
+        resultBox.textContent = `${categories[activeCategory].emoji} ${categories[activeCategory].label}ルーレットを選びました`;
+        renderWheel();
+        renderPoints();
+        updateStats();
+      });
+    });
+
+    document.querySelectorAll(".bet-button").forEach(button => {
+      button.addEventListener("click", () => {
+        if (spinning) return;
+        activeBet = Number(button.dataset.bet);
+        const resultBox = document.getElementById("luckyText");
+        resultBox.className = "";
+        resultBox.textContent = `BET${activeBet}を選びました。チケットを${activeBet}まい使います。`;
+        renderWheel();
+        renderPoints();
+        updateStats();
+      });
+    });
+
+    document.querySelectorAll(".info-button").forEach(button => {
+      button.addEventListener("click", () => openInfoModal(button.dataset.info));
+    });
+
+    document.getElementById("infoModalClose").addEventListener("click", closeInfoModal);
+    document.getElementById("infoModal").addEventListener("click", event => {
+      if (event.target.id === "infoModal") closeInfoModal();
+    });
+    document.getElementById("taskEditForm").addEventListener("submit", saveTaskEditor);
+    document.getElementById("taskEditClose").addEventListener("click", closeTaskEditor);
+    document.getElementById("deleteTaskBtn").addEventListener("click", deleteEditingTask);
+    document.getElementById("taskEditModal").addEventListener("click", event => {
+      if (event.target.id === "taskEditModal") closeTaskEditor();
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        closeInfoModal();
+        closeTaskEditor();
+      }
+    });
+
+    document.getElementById("addTaskBtn").addEventListener("click", addTask);
+    document.getElementById("resetDayBtn").addEventListener("click", resetDay);
+    document.getElementById("spinBtn").addEventListener("click", spinWheel);
+    document.getElementById("clearHistoryBtn").addEventListener("click", clearHistory);
+
+    render();
+  </script>
+</body>
+</html>
