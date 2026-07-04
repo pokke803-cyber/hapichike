@@ -801,6 +801,12 @@
       transform: translateY(-1px);
     }
 
+    .history-search-button {
+      background: linear-gradient(135deg, #38bdf8, #a78bfa);
+      color: #fff;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .28);
+    }
+
     .edit-form {
       display: grid;
       gap: 10px;
@@ -1492,6 +1498,98 @@
       padding-left: 1.2em;
     }
 
+    .search-form {
+      display: grid;
+      gap: 12px;
+    }
+
+    .search-box {
+      display: grid;
+      gap: 6px;
+      color: #23324d;
+      font-weight: 900;
+    }
+
+    .search-box input {
+      width: 100%;
+      border: 4px solid #ffd166;
+      border-radius: 18px;
+      padding: 13px 15px;
+      background: #fffdf1;
+      color: #23324d;
+      font-size: 1.05rem;
+      font-weight: 900;
+      outline: none;
+    }
+
+    .search-box input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 5px rgba(56, 189, 248, .18);
+    }
+
+    .history-result-list {
+      display: grid;
+      gap: 10px;
+      max-height: min(55vh, 430px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .history-result-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, .95), rgba(255, 248, 214, .9));
+      border: 3px solid rgba(255, 209, 102, .68);
+      box-shadow: 0 7px 0 rgba(56, 189, 248, .13);
+    }
+
+    .history-result-icon {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      border-radius: 18px;
+      background: #fff;
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .08);
+      font-size: 1.7rem;
+    }
+
+    .history-result-title {
+      color: #23324d;
+      font-weight: 900;
+      line-height: 1.25;
+    }
+
+    .history-result-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 6px;
+    }
+
+    .history-add-button {
+      min-width: 96px;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 12px;
+      background: linear-gradient(135deg, #ef233c, #ff8fab);
+      color: #fff;
+      font-weight: 900;
+      box-shadow: 0 6px 0 #9f1239;
+      cursor: pointer;
+    }
+
+    .history-add-button:disabled {
+      background: #cbd5e1;
+      color: #64748b;
+      box-shadow: none;
+      cursor: not-allowed;
+    }
+
     .confetti {
       position: fixed;
       top: -18px;
@@ -1744,6 +1842,7 @@
         <h2 class="panel-title"><span>🎟️</span><span id="taskSectionTitle">今日のお手伝い</span></h2>
         <div class="task-tools">
           <button class="primary" id="addTaskBtn">あたらしく追加</button>
+          <button class="secondary history-search-button" id="openTaskHistoryBtn">りれきから検索する🔍</button>
           <button class="secondary" id="resetDayBtn">今日の状態をリセット</button>
         </div>
         <div class="task-filter" id="taskCategoryFilter" aria-label="お手伝いカテゴリー"></div>
@@ -1838,12 +1937,11 @@
         <label>
           カテゴリー
           <select id="editTaskCategory">
-            <option value="living">生き物</option>
+            <option value="creature">生き物</option>
             <option value="cooking">りょうり</option>
             <option value="laundry">洗だく</option>
             <option value="cleanup">片つけ</option>
-            <option value="study">べんきょう</option>
-            <option value="other">その他</option>
+            <option value="outside">そとのお仕事</option>
           </select>
         </label>
         <label>
@@ -1873,11 +1971,26 @@
       <div class="info-modal-body" id="infoModalBody"></div>
     </section>
   </div>
+  <div class="modal-backdrop hidden" id="taskHistoryModal" role="dialog" aria-modal="true" aria-labelledby="taskHistoryTitle">
+    <section class="info-modal">
+      <header>
+        <h3 id="taskHistoryTitle">りれきから検索する🔍</h3>
+        <button class="modal-close" id="taskHistoryClose" aria-label="閉じる">×</button>
+      </header>
+      <div class="info-modal-body search-form">
+        <label class="search-box">
+          お手伝いをさがす
+          <input id="taskHistorySearchInput" autocomplete="off" placeholder="例：食器、そうじ、せんたく">
+        </label>
+        <div class="history-result-list" id="taskHistoryResults"></div>
+      </div>
+    </section>
+  </div>
 
   <script>
     const storageKey = "kidsVegasCasino.v1";
     const defaultTasks = [
-      { id: "feed-pet", icon: "🐟", title: "生き物のごはんあつめ", difficulty: "easy", ticketReward: 1, category: "living", status: "idle", isDefault: true },
+      { id: "feed-pet", icon: "🐟", title: "生き物のごはんあつめ", difficulty: "easy", ticketReward: 1, category: "creature", status: "idle", isDefault: true },
       { id: "toy-clean", icon: "🧸", title: "おもちゃの片づけ", difficulty: "easy", ticketReward: 1, category: "cleanup", status: "idle", isDefault: true },
       { id: "laundry-carry", icon: "🧺", title: "せんたくものをはこぶ", difficulty: "easy", ticketReward: 1, category: "laundry", status: "idle", isDefault: true },
       { id: "wipe-table", icon: "✨", title: "テーブルをふく", difficulty: "normal", ticketReward: 2, category: "cooking", status: "idle", isDefault: true },
@@ -1893,12 +2006,11 @@
 
     const taskCategories = [
       { id: "all", label: "すべて", icon: "🌈" },
-      { id: "living", label: "生き物", icon: "🐟" },
-      { id: "cooking", label: "りょうり", icon: "🍽️" },
+      { id: "creature", label: "生き物", icon: "🐟" },
+      { id: "cooking", label: "りょうり", icon: "🍳" },
       { id: "laundry", label: "洗だく", icon: "🧺" },
       { id: "cleanup", label: "片つけ", icon: "🧸" },
-      { id: "study", label: "べんきょう", icon: "📚" },
-      { id: "other", label: "その他", icon: "⭐" }
+      { id: "outside", label: "そとのお仕事", icon: "🌱" }
     ];
 
     const categories = {
@@ -2007,7 +2119,7 @@
         const saved = JSON.parse(localStorage.getItem(storageKey));
         if (saved && Array.isArray(saved.tasks)) return normalizeState(saved);
       } catch (error) {}
-      return normalizeState({ childName: "", coins: 0, tasks: defaultTasks, history: [], payLogs: [], badges: [] });
+      return normalizeState({ childName: "", coins: 0, tasks: defaultTasks, history: [], payLogs: [], taskHistory: [], badges: [] });
     }
 
     function normalizeState(saved) {
@@ -2017,6 +2129,7 @@
         tasks: Array.isArray(saved.tasks) ? normalizeTasks(saved.tasks) : defaultTasks.map(task => ({ ...task })),
         history: Array.isArray(saved.history) ? saved.history : [],
         payLogs: Array.isArray(saved.payLogs) ? saved.payLogs : [],
+        taskHistory: normalizeTaskHistory(saved.taskHistory, saved.tasks),
         badges: Array.isArray(saved.badges) ? saved.badges : [],
         points: {
           snack: Number(saved.points?.snack) || 0,
@@ -2030,9 +2143,23 @@
       return tasks.map(normalizeTask);
     }
 
+    function normalizeCategory(category, title = "", icon = "") {
+      if (category === "creature" || category === "cooking" || category === "laundry" || category === "cleanup" || category === "outside") return category;
+      if (category === "living") {
+        needsStateSave = true;
+        return "creature";
+      }
+      if (category === "other" || category === "study") {
+        needsStateSave = true;
+        return inferTaskCategory(title, icon);
+      }
+      needsStateSave = true;
+      return inferTaskCategory(title, icon);
+    }
+
     function normalizeTask(task, index = 0) {
       if (task.title) {
-        const category = task.category || inferTaskCategory(task.title, task.icon);
+        const category = normalizeCategory(task.category, task.title, task.icon);
         if (!task.category) needsStateSave = true;
         return {
           id: task.id || `task-${Date.now()}-${index}`,
@@ -2054,7 +2181,7 @@
         title: legacyTitle,
         difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
         ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
-        category: task.category || inferTaskCategory(legacyTitle, task.icon),
+        category: normalizeCategory(task.category, legacyTitle, task.icon),
         status: task.done ? "done" : "idle",
         isDefault: Boolean(task.isDefault)
       };
@@ -2062,17 +2189,58 @@
 
     function inferTaskCategory(title, icon = "") {
       const text = `${title || ""} ${icon || ""}`;
-      if (/生き物|ごはんあつめ|えさ|餌|魚|ペット|動物|🐟|🐶|🐱|🐹/.test(text)) return "living";
+      if (/生き物|ごはんあつめ|えさ|餌|魚|ペット|動物|🐟|🐶|🐱|🐹/.test(text)) return "creature";
       if (/食器|テーブル|ごはん|りょうり|料理|皿|キッチン|🍽|🥗/.test(text)) return "cooking";
       if (/せんたく|洗たく|洗濯|ランドリー|はこぶ|たたむ|🧺/.test(text)) return "laundry";
+      if (/玄関|草取り|水やり|庭|外|そと|ベランダ|花|植物|🌱|🪴/.test(text)) return "outside";
       if (/おもちゃ|片づけ|片付け|そうじ|掃除|そうじき|へや|部屋|🧸|🧹|🧽/.test(text)) return "cleanup";
-      if (/しゅくだい|宿題|べんきょう|勉強|本|読む|📚|📝/.test(text)) return "study";
-      return "other";
+      return "cleanup";
     }
 
     function getTaskCategoryLabel(category) {
       const item = taskCategories.find(taskCategory => taskCategory.id === category);
-      return item ? `${item.icon} ${item.label}` : `⭐ ${category || "その他"}`;
+      return item ? `${item.icon} ${item.label}` : "🧸 片つけ";
+    }
+
+    function normalizeTaskHistory(savedHistory, savedTasks) {
+      const map = new Map();
+      const sources = [
+        ...(Array.isArray(savedHistory) ? savedHistory : []),
+        ...(Array.isArray(savedTasks) ? savedTasks : [])
+      ];
+
+      sources.forEach((item, index) => {
+        const title = item.title || item.name;
+        if (!title) return;
+        const normalized = {
+          id: item.historyId || item.id || `history-${index}-${title}`,
+          sourceTaskId: item.sourceTaskId || item.id || "",
+          title,
+          icon: item.icon || "⭐",
+          category: normalizeCategory(item.category, title, item.icon),
+          difficulty: ["easy", "normal", "hard"].includes(item.difficulty) ? item.difficulty : "easy",
+          ticketReward: Math.min(5, Math.max(1, Number(item.ticketReward) || 1)),
+          lastUsedAt: item.lastUsedAt || item.date || "",
+          completedCount: Math.max(0, Number(item.completedCount) || (item.status === "done" || item.done ? 1 : 0))
+        };
+        const key = getTaskHistoryKey(normalized);
+        const current = map.get(key);
+        if (!current || (normalized.lastUsedAt || "") > (current.lastUsedAt || "")) {
+          map.set(key, current ? { ...normalized, completedCount: Math.max(current.completedCount, normalized.completedCount) } : normalized);
+        }
+      });
+
+      if (!Array.isArray(savedHistory) || map.size !== (savedHistory || []).length) needsStateSave = true;
+      return Array.from(map.values()).sort(sortTaskHistory);
+    }
+
+    function getTaskHistoryKey(task) {
+      return `${String(task.title || "").trim()}::${task.category || ""}`;
+    }
+
+    function sortTaskHistory(a, b) {
+      if ((b.lastUsedAt || "") !== (a.lastUsedAt || "")) return (b.lastUsedAt || "").localeCompare(a.lastUsedAt || "");
+      return (Number(b.completedCount) || 0) - (Number(a.completedCount) || 0);
     }
 
     function saveState() {
@@ -2093,6 +2261,10 @@
       }).format(new Date());
     }
 
+    function nowIsoString() {
+      return new Date().toISOString();
+    }
+
     function addHistory(text) {
       state.history.unshift({ text, date: todayString() });
       state.history = state.history.slice(0, 40);
@@ -2111,6 +2283,40 @@
         date: todayString()
       });
       state.payLogs = state.payLogs.slice(0, 50);
+    }
+
+    function upsertTaskHistory(task, options = {}) {
+      if (!task || !task.title) return;
+      const category = normalizeCategory(task.category, task.title, task.icon);
+      const snapshot = {
+        id: task.historyId || task.id || `history-${Date.now()}`,
+        sourceTaskId: task.id || "",
+        title: task.title,
+        icon: task.icon || "⭐",
+        category,
+        difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
+        ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+        lastUsedAt: nowIsoString(),
+        completedCount: 0
+      };
+      const key = getTaskHistoryKey(snapshot);
+      const existingIndex = state.taskHistory.findIndex(item => getTaskHistoryKey(item) === key);
+      if (existingIndex >= 0) {
+        const existing = state.taskHistory[existingIndex];
+        state.taskHistory[existingIndex] = {
+          ...existing,
+          ...snapshot,
+          id: existing.id || snapshot.id,
+          sourceTaskId: existing.sourceTaskId || snapshot.sourceTaskId,
+          completedCount: (Number(existing.completedCount) || 0) + (options.completed ? 1 : 0)
+        };
+      } else {
+        state.taskHistory.push({
+          ...snapshot,
+          completedCount: options.completed ? 1 : 0
+        });
+      }
+      state.taskHistory = state.taskHistory.sort(sortTaskHistory).slice(0, 80);
     }
 
     function render() {
@@ -2259,6 +2465,94 @@
           renderTasks();
         });
       });
+    }
+
+    function openTaskHistorySearch() {
+      document.getElementById("taskHistoryModal").classList.remove("hidden");
+      document.getElementById("taskHistorySearchInput").value = "";
+      renderTaskHistorySearch();
+      setTimeout(() => document.getElementById("taskHistorySearchInput").focus(), 0);
+    }
+
+    function closeTaskHistorySearch() {
+      document.getElementById("taskHistoryModal").classList.add("hidden");
+    }
+
+    function renderTaskHistorySearch() {
+      const list = document.getElementById("taskHistoryResults");
+      const query = document.getElementById("taskHistorySearchInput").value.trim().toLowerCase();
+      const source = [...state.taskHistory].sort(sortTaskHistory);
+      const results = source.filter(item => {
+        if (!query) return true;
+        const searchable = [
+          item.title,
+          item.icon,
+          getTaskCategoryLabel(item.category),
+          difficultyLabels[item.difficulty],
+          `${item.ticketReward}枚`
+        ].join(" ").toLowerCase();
+        return searchable.includes(query);
+      });
+
+      if (!results.length) {
+        list.innerHTML = `<div class="log-item">りれきに見つからなかったよ。あたらしく追加してみよう。</div>`;
+        return;
+      }
+
+      list.innerHTML = results.map(item => {
+        const added = isTaskAlreadyToday(item);
+        return `
+          <article class="history-result-card">
+            <div class="history-result-icon">${escapeHtml(item.icon)}</div>
+            <div>
+              <div class="history-result-title">${escapeHtml(item.title)}</div>
+              <div class="history-result-meta">
+                <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(item.category))}</span>
+                <span class="task-badge ${item.difficulty}">${difficultyLabels[item.difficulty]}</span>
+                <span class="status-badge idle">🎫 ${Number(item.ticketReward) || 1}枚</span>
+                <span class="status-badge done">回数 ${Number(item.completedCount) || 0}</span>
+              </div>
+            </div>
+            <button class="history-add-button" data-history-add="${escapeHtml(item.id)}" ${added ? "disabled" : ""}>${added ? "追加済み" : "今日に追加"}</button>
+          </article>
+        `;
+      }).join("");
+
+      list.querySelectorAll("[data-history-add]").forEach(button => {
+        button.addEventListener("click", () => addTaskFromHistory(button.dataset.historyAdd));
+      });
+    }
+
+    function isTaskAlreadyToday(historyItem) {
+      const key = getTaskHistoryKey(historyItem);
+      return state.tasks.some(task => getTaskHistoryKey(task) === key);
+    }
+
+    function addTaskFromHistory(historyId) {
+      const item = state.taskHistory.find(historyTask => historyTask.id === historyId);
+      if (!item || isTaskAlreadyToday(item)) {
+        renderTaskHistorySearch();
+        return;
+      }
+
+      const task = {
+        id: `task-${Date.now()}`,
+        icon: item.icon || "⭐",
+        title: item.title,
+        difficulty: item.difficulty,
+        ticketReward: Math.min(5, Math.max(1, Number(item.ticketReward) || 1)),
+        category: normalizeCategory(item.category, item.title, item.icon),
+        status: "idle",
+        isDefault: false
+      };
+      state.tasks.push(task);
+      upsertTaskHistory(task);
+      addHistory(`りれきから「${task.title}」を今日に追加しました。`);
+      saveState();
+      activeTaskCategory = "all";
+      render();
+      renderTaskHistorySearch();
+      showToast(`「${task.title}」を今日に追加しました。`);
     }
 
     function getTaskStatusLabel(status) {
@@ -2451,6 +2745,7 @@
       if (!task || task.status !== "inProgress") return;
       task.status = "done";
       state.coins += task.ticketReward;
+      upsertTaskHistory(task, { completed: true });
       addHistory(`「${task.title}」を完了。チケット +${task.ticketReward}`);
       saveState();
       render();
@@ -2470,6 +2765,7 @@
         isDefault: false
       };
       state.tasks.push(task);
+      upsertTaskHistory(task);
       saveState();
       render();
       openTaskEditor(task.id);
@@ -2586,7 +2882,7 @@
       document.getElementById("editTaskIcon").value = task.icon;
       document.getElementById("editTaskTitle").value = task.title;
       document.getElementById("editTaskDifficulty").value = task.difficulty;
-      document.getElementById("editTaskCategory").value = taskCategories.some(category => category.id === task.category) ? task.category : "other";
+      document.getElementById("editTaskCategory").value = taskCategories.some(category => category.id === task.category && category.id !== "all") ? task.category : "cleanup";
       document.getElementById("editTaskReward").value = String(task.ticketReward);
       document.getElementById("taskEditError").textContent = "";
       document.getElementById("taskEditModal").classList.remove("hidden");
@@ -2633,6 +2929,7 @@
       task.difficulty = difficulty;
       task.category = category;
       task.ticketReward = reward;
+      upsertTaskHistory(task);
       saveState();
       render();
       closeTaskEditor();
@@ -2733,6 +3030,12 @@
     document.getElementById("infoModal").addEventListener("click", event => {
       if (event.target.id === "infoModal") closeInfoModal();
     });
+    document.getElementById("openTaskHistoryBtn").addEventListener("click", openTaskHistorySearch);
+    document.getElementById("taskHistoryClose").addEventListener("click", closeTaskHistorySearch);
+    document.getElementById("taskHistorySearchInput").addEventListener("input", renderTaskHistorySearch);
+    document.getElementById("taskHistoryModal").addEventListener("click", event => {
+      if (event.target.id === "taskHistoryModal") closeTaskHistorySearch();
+    });
     document.getElementById("taskEditForm").addEventListener("submit", saveTaskEditor);
     document.getElementById("loginForm").addEventListener("submit", saveChildName);
     document.getElementById("changeNameBtn").addEventListener("click", openNameLogin);
@@ -2745,6 +3048,7 @@
       if (event.key === "Escape") {
         closeInfoModal();
         closeTaskEditor();
+        closeTaskHistorySearch();
       }
     });
 
