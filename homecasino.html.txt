@@ -701,6 +701,11 @@
     .task-badge.normal { color: #9a5d00; background: #fff8d6; }
     .task-badge.hard { color: #ef233c; background: #ffe4ec; }
 
+    .task-category {
+      color: #075985;
+      background: #dff7ff;
+    }
+
     .status-badge.idle { color: #64748b; }
     .status-badge.inProgress { color: #0284c7; background: #dff7ff; }
     .status-badge.done { color: #118a5f; background: #e9f9ef; }
@@ -767,6 +772,33 @@
       border-radius: 999px;
       border: 3px solid #fff;
       box-shadow: 0 6px 0 rgba(255, 111, 145, .14);
+    }
+
+    .task-filter {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 4px 2px 12px;
+      scrollbar-width: thin;
+    }
+
+    .task-filter-button {
+      flex: 0 0 auto;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      padding: 9px 13px;
+      background: #fff;
+      color: #273043;
+      font-weight: 900;
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .1);
+      cursor: pointer;
+    }
+
+    .task-filter-button.active {
+      background: linear-gradient(135deg, #ffd166, #ff8fab);
+      color: #fff;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .3);
+      transform: translateY(-1px);
     }
 
     .edit-form {
@@ -1714,6 +1746,7 @@
           <button class="primary" id="addTaskBtn">あたらしく追加</button>
           <button class="secondary" id="resetDayBtn">今日の状態をリセット</button>
         </div>
+        <div class="task-filter" id="taskCategoryFilter" aria-label="お手伝いカテゴリー"></div>
         <div class="task-grid" id="taskList"></div>
         <div class="badge-row" id="badgeRow"></div>
       </section>
@@ -1803,6 +1836,17 @@
           </select>
         </label>
         <label>
+          カテゴリー
+          <select id="editTaskCategory">
+            <option value="living">生き物</option>
+            <option value="cooking">りょうり</option>
+            <option value="laundry">洗だく</option>
+            <option value="cleanup">片つけ</option>
+            <option value="study">べんきょう</option>
+            <option value="other">その他</option>
+          </select>
+        </label>
+        <label>
           もらえるチケット
           <select id="editTaskReward">
             <option value="1">1枚</option>
@@ -1833,12 +1877,12 @@
   <script>
     const storageKey = "kidsVegasCasino.v1";
     const defaultTasks = [
-      { id: "feed-pet", icon: "🐟", title: "生き物のごはんあつめ", difficulty: "easy", ticketReward: 1, status: "idle", isDefault: true },
-      { id: "toy-clean", icon: "🧸", title: "おもちゃの片づけ", difficulty: "easy", ticketReward: 1, status: "idle", isDefault: true },
-      { id: "laundry-carry", icon: "🧺", title: "せんたくものをはこぶ", difficulty: "easy", ticketReward: 1, status: "idle", isDefault: true },
-      { id: "wipe-table", icon: "✨", title: "テーブルをふく", difficulty: "normal", ticketReward: 2, status: "idle", isDefault: true },
-      { id: "dish-help", icon: "🍽️", title: "食器洗いのお手伝い", difficulty: "normal", ticketReward: 2, status: "idle", isDefault: true },
-      { id: "vacuum-help", icon: "🧹", title: "そうじきのお手伝い", difficulty: "hard", ticketReward: 3, status: "idle", isDefault: true }
+      { id: "feed-pet", icon: "🐟", title: "生き物のごはんあつめ", difficulty: "easy", ticketReward: 1, category: "living", status: "idle", isDefault: true },
+      { id: "toy-clean", icon: "🧸", title: "おもちゃの片づけ", difficulty: "easy", ticketReward: 1, category: "cleanup", status: "idle", isDefault: true },
+      { id: "laundry-carry", icon: "🧺", title: "せんたくものをはこぶ", difficulty: "easy", ticketReward: 1, category: "laundry", status: "idle", isDefault: true },
+      { id: "wipe-table", icon: "✨", title: "テーブルをふく", difficulty: "normal", ticketReward: 2, category: "cooking", status: "idle", isDefault: true },
+      { id: "dish-help", icon: "🍽️", title: "食器洗いのお手伝い", difficulty: "normal", ticketReward: 2, category: "cooking", status: "idle", isDefault: true },
+      { id: "vacuum-help", icon: "🧹", title: "そうじきのお手伝い", difficulty: "hard", ticketReward: 3, category: "cleanup", status: "idle", isDefault: true }
     ];
 
     const difficultyLabels = {
@@ -1846,6 +1890,16 @@
       normal: "ふつう",
       hard: "むずかしい"
     };
+
+    const taskCategories = [
+      { id: "all", label: "すべて", icon: "🌈" },
+      { id: "living", label: "生き物", icon: "🐟" },
+      { id: "cooking", label: "りょうり", icon: "🍽️" },
+      { id: "laundry", label: "洗だく", icon: "🧺" },
+      { id: "cleanup", label: "片つけ", icon: "🧸" },
+      { id: "study", label: "べんきょう", icon: "📚" },
+      { id: "other", label: "その他", icon: "⭐" }
+    ];
 
     const categories = {
       snack: { label: "お菓子", emoji: "🍪", pointName: "お菓子P" },
@@ -1937,8 +1991,11 @@
     ];
 
     const icons = ["🧹", "📚", "🪥", "🥗", "😊", "🧺", "🌱", "🧽", "📝", "🎵"];
+    let needsStateSave = false;
     let state = loadState();
+    if (needsStateSave) saveState();
     let activeCategory = "snack";
+    let activeTaskCategory = "all";
     let activeBet = 1;
     let rotation = 0;
     let spinning = false;
@@ -1970,34 +2027,52 @@
     }
 
     function normalizeTasks(tasks) {
-      const oldDefaultNames = ["へやを 5分 かたづける", "しゅくだいを 1つ すすめる", "はみがきをていねいにする", "ごはんのじゅんびを手つだう", "家族にありがとうを言う"];
-      const looksLikeOldDefault = tasks.length <= 5 && tasks.every(task => !task.title && oldDefaultNames.includes(task.name));
-      if (looksLikeOldDefault) return defaultTasks.map(task => ({ ...task }));
       return tasks.map(normalizeTask);
     }
 
     function normalizeTask(task, index = 0) {
       if (task.title) {
+        const category = task.category || inferTaskCategory(task.title, task.icon);
+        if (!task.category) needsStateSave = true;
         return {
           id: task.id || `task-${Date.now()}-${index}`,
           icon: task.icon || "⭐",
           title: task.title,
           difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
           ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+          category,
           status: ["idle", "inProgress", "done"].includes(task.status) ? task.status : (task.done ? "done" : "idle"),
           isDefault: Boolean(task.isDefault)
         };
       }
 
+      needsStateSave = true;
+      const legacyTitle = task.name || "新しいお手伝い";
       return {
-        id: `legacy-${Date.now()}-${index}`,
+        id: task.id || `legacy-${Date.now()}-${index}`,
         icon: task.icon || "⭐",
-        title: task.name || "新しいお手伝い",
-        difficulty: "easy",
-        ticketReward: 1,
+        title: legacyTitle,
+        difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
+        ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+        category: task.category || inferTaskCategory(legacyTitle, task.icon),
         status: task.done ? "done" : "idle",
-        isDefault: false
+        isDefault: Boolean(task.isDefault)
       };
+    }
+
+    function inferTaskCategory(title, icon = "") {
+      const text = `${title || ""} ${icon || ""}`;
+      if (/生き物|ごはんあつめ|えさ|餌|魚|ペット|動物|🐟|🐶|🐱|🐹/.test(text)) return "living";
+      if (/食器|テーブル|ごはん|りょうり|料理|皿|キッチン|🍽|🥗/.test(text)) return "cooking";
+      if (/せんたく|洗たく|洗濯|ランドリー|はこぶ|たたむ|🧺/.test(text)) return "laundry";
+      if (/おもちゃ|片づけ|片付け|そうじ|掃除|そうじき|へや|部屋|🧸|🧹|🧽/.test(text)) return "cleanup";
+      if (/しゅくだい|宿題|べんきょう|勉強|本|読む|📚|📝/.test(text)) return "study";
+      return "other";
+    }
+
+    function getTaskCategoryLabel(category) {
+      const item = taskCategories.find(taskCategory => taskCategory.id === category);
+      return item ? `${item.icon} ${item.label}` : `⭐ ${category || "その他"}`;
     }
 
     function saveState() {
@@ -2040,6 +2115,7 @@
 
     function render() {
       renderAccount();
+      renderTaskFilters();
       renderTasks();
       renderRewards();
       renderHistory();
@@ -2126,7 +2202,16 @@
     function renderTasks() {
       const list = document.getElementById("taskList");
       list.innerHTML = "";
-      state.tasks.forEach(task => {
+      const visibleTasks = activeTaskCategory === "all"
+        ? state.tasks
+        : state.tasks.filter(task => task.category === activeTaskCategory);
+
+      if (!visibleTasks.length) {
+        list.innerHTML = `<div class="log-item">このカテゴリーのお手伝いはまだありません。</div>`;
+        return;
+      }
+
+      visibleTasks.forEach(task => {
         const card = document.createElement("article");
         card.className = `task-card ${task.status === "inProgress" ? "in-progress" : ""} ${task.status === "done" ? "done" : ""}`;
         card.innerHTML = `
@@ -2136,6 +2221,7 @@
               <div class="task-name-display">${escapeHtml(task.title)}</div>
               <div class="task-meta">
                 <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
+                <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
                 <span class="status-badge ${task.status}">${getTaskStatusLabel(task.status)}</span>
               </div>
             </div>
@@ -2154,6 +2240,24 @@
         card.querySelector('[data-action="finish"]').addEventListener("click", () => finishTask(task.id));
         card.querySelector('[data-action="edit"]').addEventListener("click", () => openTaskEditor(task.id));
         list.appendChild(card);
+      });
+    }
+
+    function renderTaskFilters() {
+      const filter = document.getElementById("taskCategoryFilter");
+      filter.innerHTML = taskCategories.map(category => {
+        const count = category.id === "all"
+          ? state.tasks.length
+          : state.tasks.filter(task => task.category === category.id).length;
+        return `<button class="task-filter-button ${activeTaskCategory === category.id ? "active" : ""}" data-task-category="${category.id}">${category.icon} ${category.label} ${count}</button>`;
+      }).join("");
+
+      filter.querySelectorAll("[data-task-category]").forEach(button => {
+        button.addEventListener("click", () => {
+          activeTaskCategory = button.dataset.taskCategory;
+          renderTaskFilters();
+          renderTasks();
+        });
       });
     }
 
@@ -2361,6 +2465,7 @@
         title: "新しいお手伝い",
         difficulty: "easy",
         ticketReward: 1,
+        category: activeTaskCategory === "all" ? "cleanup" : activeTaskCategory,
         status: "idle",
         isDefault: false
       };
@@ -2481,6 +2586,7 @@
       document.getElementById("editTaskIcon").value = task.icon;
       document.getElementById("editTaskTitle").value = task.title;
       document.getElementById("editTaskDifficulty").value = task.difficulty;
+      document.getElementById("editTaskCategory").value = taskCategories.some(category => category.id === task.category) ? task.category : "other";
       document.getElementById("editTaskReward").value = String(task.ticketReward);
       document.getElementById("taskEditError").textContent = "";
       document.getElementById("taskEditModal").classList.remove("hidden");
@@ -2498,6 +2604,7 @@
       if (!task) return;
       const title = document.getElementById("editTaskTitle").value.trim();
       const difficulty = document.getElementById("editTaskDifficulty").value;
+      const category = document.getElementById("editTaskCategory").value;
       const reward = Number(document.getElementById("editTaskReward").value);
       const error = document.getElementById("taskEditError");
 
@@ -2511,6 +2618,11 @@
         return;
       }
 
+      if (!taskCategories.some(taskCategory => taskCategory.id === category && taskCategory.id !== "all")) {
+        error.textContent = "カテゴリーをえらんでね";
+        return;
+      }
+
       if (!Number.isInteger(reward) || reward < 1 || reward > 5) {
         error.textContent = "TICKET枚数は1〜5枚でえらんでね";
         return;
@@ -2519,6 +2631,7 @@
       task.icon = document.getElementById("editTaskIcon").value.trim() || "⭐";
       task.title = title;
       task.difficulty = difficulty;
+      task.category = category;
       task.ticketReward = reward;
       saveState();
       render();
