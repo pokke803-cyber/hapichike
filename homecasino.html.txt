@@ -807,6 +807,109 @@
       text-shadow: 0 2px 0 rgba(39, 48, 67, .28);
     }
 
+    .parent-entry {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 18;
+      border: 3px solid rgba(255, 255, 255, .92);
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, .9);
+      color: #273043;
+      font-weight: 900;
+      box-shadow: 0 7px 0 rgba(39, 48, 67, .14);
+      cursor: pointer;
+    }
+
+    .parent-entry:hover {
+      transform: translateY(-1px);
+    }
+
+    .parent-panel.hidden {
+      display: none;
+    }
+
+    .parent-note {
+      margin: 0 0 12px;
+      color: #475569;
+      font-weight: 800;
+      line-height: 1.6;
+    }
+
+    .parent-task-list {
+      display: grid;
+      gap: 12px;
+      max-height: min(58vh, 520px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .parent-task-card {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border: 3px solid rgba(255, 209, 102, .72);
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, .96), rgba(255, 248, 214, .92));
+      box-shadow: 0 7px 0 rgba(39, 48, 67, .1);
+    }
+
+    .parent-task-head {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+    }
+
+    .parent-task-icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 16px;
+      background: #fff;
+      font-size: 1.6rem;
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .08);
+    }
+
+    .parent-task-name {
+      color: #23324d;
+      font-weight: 900;
+      line-height: 1.25;
+    }
+
+    .ticket-choice-row {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .ticket-choice {
+      min-height: 40px;
+      border: 3px solid #fff;
+      border-radius: 15px;
+      background: #fff;
+      color: #273043;
+      font-weight: 900;
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .1);
+      cursor: pointer;
+    }
+
+    .ticket-choice.active {
+      background: linear-gradient(135deg, #ffd166, #ff8fab);
+      color: #fff;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .3);
+      box-shadow: 0 6px 0 rgba(239, 35, 60, .26);
+    }
+
+    .parent-save-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
     .edit-form {
       display: grid;
       gap: 10px;
@@ -1944,16 +2047,6 @@
             <option value="outside">そとのお仕事</option>
           </select>
         </label>
-        <label>
-          もらえるチケット
-          <select id="editTaskReward">
-            <option value="1">1枚</option>
-            <option value="2">2枚</option>
-            <option value="3">3枚</option>
-            <option value="4">4枚</option>
-            <option value="5">5枚</option>
-          </select>
-        </label>
         <div class="edit-actions">
           <button class="secondary" type="button" id="deleteTaskBtn">削除</button>
           <button class="primary" type="submit">保存</button>
@@ -1986,6 +2079,36 @@
       </div>
     </section>
   </div>
+  <div class="modal-backdrop hidden" id="parentSettingsModal" role="dialog" aria-modal="true" aria-labelledby="parentSettingsTitle">
+    <section class="info-modal">
+      <header>
+        <h3 id="parentSettingsTitle">おうちの人用</h3>
+        <button class="modal-close" id="parentSettingsClose" aria-label="閉じる">×</button>
+      </header>
+      <form class="info-modal-body edit-form parent-panel" id="parentPasswordPanel">
+        <p class="parent-note">チケット枚数を変更するには、パスワードを入力してください。</p>
+        <label>
+          パスワード
+          <input id="parentPasswordInput" type="password" inputmode="numeric" autocomplete="off" placeholder="1234">
+        </label>
+        <div class="edit-error" id="parentPasswordError" role="alert"></div>
+        <div class="edit-actions">
+          <button class="secondary" type="button" id="parentBackBtn">もどる</button>
+          <button class="primary" type="submit">入る</button>
+        </div>
+      </form>
+      <div class="info-modal-body parent-panel hidden" id="parentRewardPanel">
+        <p class="parent-note">お手伝いでもらえるチケット枚数だけを変更できます。名前・状態・カテゴリーはここでは変わりません。</p>
+        <div class="parent-task-list" id="parentTaskList"></div>
+        <div class="edit-error" id="parentRewardMessage" role="status"></div>
+        <div class="parent-save-row">
+          <button class="secondary" type="button" id="parentRewardBackBtn">もどる</button>
+          <button class="primary" type="button" id="saveParentRewardsBtn">保存</button>
+        </div>
+      </div>
+    </section>
+  </div>
+  <button class="parent-entry" id="openParentSettingsBtn" type="button">おうちの人用</button>
 
   <script>
     const storageKey = "kidsVegasCasino.v1";
@@ -2112,6 +2235,7 @@
     let rotation = 0;
     let spinning = false;
     let editingTaskId = null;
+    let parentRewardDraft = {};
     let usePayAmount = { sweets: "", toy: "", game: "" };
 
     function loadState() {
@@ -2119,7 +2243,7 @@
         const saved = JSON.parse(localStorage.getItem(storageKey));
         if (saved && Array.isArray(saved.tasks)) return normalizeState(saved);
       } catch (error) {}
-      return normalizeState({ childName: "", coins: 0, tasks: defaultTasks, history: [], payLogs: [], taskHistory: [], badges: [] });
+      return normalizeState({ childName: "", coins: 0, tasks: defaultTasks, history: [], payLogs: [], taskHistory: [], parentPassword: "1234", badges: [] });
     }
 
     function normalizeState(saved) {
@@ -2130,6 +2254,7 @@
         history: Array.isArray(saved.history) ? saved.history : [],
         payLogs: Array.isArray(saved.payLogs) ? saved.payLogs : [],
         taskHistory: normalizeTaskHistory(saved.taskHistory, saved.tasks),
+        parentPassword: String(saved.parentPassword || "1234"),
         badges: Array.isArray(saved.badges) ? saved.badges : [],
         points: {
           snack: Number(saved.points?.snack) || 0,
@@ -2555,6 +2680,118 @@
       showToast(`「${task.title}」を今日に追加しました。`);
     }
 
+    function openParentSettings() {
+      parentRewardDraft = {};
+      document.getElementById("parentPasswordInput").value = "";
+      document.getElementById("parentPasswordError").textContent = "";
+      document.getElementById("parentRewardMessage").textContent = "";
+      document.getElementById("parentPasswordPanel").classList.remove("hidden");
+      document.getElementById("parentRewardPanel").classList.add("hidden");
+      document.getElementById("parentSettingsModal").classList.remove("hidden");
+      setTimeout(() => document.getElementById("parentPasswordInput").focus(), 0);
+    }
+
+    function closeParentSettings() {
+      document.getElementById("parentSettingsModal").classList.add("hidden");
+      document.getElementById("parentPasswordError").textContent = "";
+      document.getElementById("parentRewardMessage").textContent = "";
+      parentRewardDraft = {};
+    }
+
+    function enterParentSettings(event) {
+      event.preventDefault();
+      const input = document.getElementById("parentPasswordInput");
+      const error = document.getElementById("parentPasswordError");
+      const password = input.value.trim();
+
+      if (!password) {
+        error.textContent = "パスワードを入れてください";
+        input.focus();
+        return;
+      }
+
+      if (password !== state.parentPassword) {
+        error.textContent = "パスワードがちがいます";
+        input.focus();
+        return;
+      }
+
+      document.getElementById("parentPasswordPanel").classList.add("hidden");
+      document.getElementById("parentRewardPanel").classList.remove("hidden");
+      renderParentRewardSettings();
+    }
+
+    function renderParentRewardSettings() {
+      const list = document.getElementById("parentTaskList");
+      if (!state.tasks.length) {
+        list.innerHTML = `<div class="log-item">今日のお手伝いはまだありません。</div>`;
+        return;
+      }
+
+      list.innerHTML = state.tasks.map(task => {
+        const selectedReward = Number(parentRewardDraft[task.id] || task.ticketReward || 1);
+        return `
+          <article class="parent-task-card">
+            <div class="parent-task-head">
+              <div class="parent-task-icon">${escapeHtml(task.icon)}</div>
+              <div>
+                <div class="parent-task-name">${escapeHtml(task.title)}</div>
+                <div class="task-meta">
+                  <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
+                  <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
+                  <span class="status-badge idle">今は 🎫 ${selectedReward}枚</span>
+                </div>
+              </div>
+            </div>
+            <div class="ticket-choice-row" aria-label="${escapeHtml(task.title)}のチケット枚数">
+              ${[1, 2, 3, 4, 5].map(count => `
+                <button class="ticket-choice ${selectedReward === count ? "active" : ""}" type="button" data-parent-task="${escapeHtml(task.id)}" data-parent-reward="${count}">${count}枚</button>
+              `).join("")}
+            </div>
+          </article>
+        `;
+      }).join("");
+
+      list.querySelectorAll("[data-parent-task]").forEach(button => {
+        button.addEventListener("click", () => {
+          parentRewardDraft[button.dataset.parentTask] = Number(button.dataset.parentReward);
+          document.getElementById("parentRewardMessage").textContent = "";
+          renderParentRewardSettings();
+        });
+      });
+    }
+
+    function saveParentRewards() {
+      const entries = Object.entries(parentRewardDraft);
+      if (!entries.length) {
+        document.getElementById("parentRewardMessage").textContent = "変更するチケット枚数を選んでください";
+        return;
+      }
+
+      let changed = 0;
+      entries.forEach(([taskId, reward]) => {
+        const task = state.tasks.find(item => item.id === taskId);
+        const nextReward = Number(reward);
+        if (!task || !Number.isInteger(nextReward) || nextReward < 1 || nextReward > 5) return;
+        if (task.ticketReward === nextReward) return;
+        task.ticketReward = nextReward;
+        upsertTaskHistory(task);
+        changed += 1;
+      });
+
+      if (!changed) {
+        document.getElementById("parentRewardMessage").textContent = "変更はありません";
+        return;
+      }
+
+      parentRewardDraft = {};
+      saveState();
+      render();
+      renderParentRewardSettings();
+      document.getElementById("parentRewardMessage").textContent = "チケット枚数を変更しました";
+      showToast("チケット枚数を変更しました。");
+    }
+
     function getTaskStatusLabel(status) {
       if (status === "inProgress") return "作業中！";
       if (status === "done") return "かんりょう！";
@@ -2883,7 +3120,6 @@
       document.getElementById("editTaskTitle").value = task.title;
       document.getElementById("editTaskDifficulty").value = task.difficulty;
       document.getElementById("editTaskCategory").value = taskCategories.some(category => category.id === task.category && category.id !== "all") ? task.category : "cleanup";
-      document.getElementById("editTaskReward").value = String(task.ticketReward);
       document.getElementById("taskEditError").textContent = "";
       document.getElementById("taskEditModal").classList.remove("hidden");
     }
@@ -2901,7 +3137,6 @@
       const title = document.getElementById("editTaskTitle").value.trim();
       const difficulty = document.getElementById("editTaskDifficulty").value;
       const category = document.getElementById("editTaskCategory").value;
-      const reward = Number(document.getElementById("editTaskReward").value);
       const error = document.getElementById("taskEditError");
 
       if (!title) {
@@ -2919,16 +3154,10 @@
         return;
       }
 
-      if (!Number.isInteger(reward) || reward < 1 || reward > 5) {
-        error.textContent = "TICKET枚数は1〜5枚でえらんでね";
-        return;
-      }
-
       task.icon = document.getElementById("editTaskIcon").value.trim() || "⭐";
       task.title = title;
       task.difficulty = difficulty;
       task.category = category;
-      task.ticketReward = reward;
       upsertTaskHistory(task);
       saveState();
       render();
@@ -3036,6 +3265,15 @@
     document.getElementById("taskHistoryModal").addEventListener("click", event => {
       if (event.target.id === "taskHistoryModal") closeTaskHistorySearch();
     });
+    document.getElementById("openParentSettingsBtn").addEventListener("click", openParentSettings);
+    document.getElementById("parentPasswordPanel").addEventListener("submit", enterParentSettings);
+    document.getElementById("parentSettingsClose").addEventListener("click", closeParentSettings);
+    document.getElementById("parentBackBtn").addEventListener("click", closeParentSettings);
+    document.getElementById("parentRewardBackBtn").addEventListener("click", closeParentSettings);
+    document.getElementById("saveParentRewardsBtn").addEventListener("click", saveParentRewards);
+    document.getElementById("parentSettingsModal").addEventListener("click", event => {
+      if (event.target.id === "parentSettingsModal") closeParentSettings();
+    });
     document.getElementById("taskEditForm").addEventListener("submit", saveTaskEditor);
     document.getElementById("loginForm").addEventListener("submit", saveChildName);
     document.getElementById("changeNameBtn").addEventListener("click", openNameLogin);
@@ -3049,6 +3287,7 @@
         closeInfoModal();
         closeTaskEditor();
         closeTaskHistorySearch();
+        closeParentSettings();
       }
     });
 
