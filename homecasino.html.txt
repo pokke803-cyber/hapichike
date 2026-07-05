@@ -729,7 +729,7 @@
 
     .task-actions {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }
 
@@ -1944,7 +1944,6 @@
       <section class="panel active" id="tasks">
         <h2 class="panel-title"><span>🎟️</span><span id="taskSectionTitle">今日のお手伝い</span></h2>
         <div class="task-tools">
-          <button class="primary" id="addTaskBtn">あたらしく追加</button>
           <button class="secondary history-search-button" id="openTaskHistoryBtn">りれきから検索する🔍</button>
           <button class="secondary" id="resetDayBtn">今日の状態をリセット</button>
         </div>
@@ -2014,47 +2013,6 @@
   </main>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <div class="modal-backdrop hidden" id="taskEditModal" role="dialog" aria-modal="true" aria-labelledby="taskEditTitle">
-    <section class="info-modal">
-      <header>
-        <h3 id="taskEditTitle">お手伝いをへんしゅう</h3>
-        <button class="modal-close" id="taskEditClose" aria-label="閉じる">×</button>
-      </header>
-      <form class="info-modal-body edit-form" id="taskEditForm">
-        <label>
-          アイコン
-          <input id="editTaskIcon" maxlength="4" autocomplete="off">
-        </label>
-        <label>
-          お手伝い名
-          <input id="editTaskTitle" autocomplete="off" required>
-        </label>
-        <label>
-          難易度
-          <select id="editTaskDifficulty">
-            <option value="easy">かんたん</option>
-            <option value="normal">ふつう</option>
-            <option value="hard">むずかしい</option>
-          </select>
-        </label>
-        <label>
-          カテゴリー
-          <select id="editTaskCategory">
-            <option value="creature">生き物</option>
-            <option value="cooking">りょうり</option>
-            <option value="laundry">洗だく</option>
-            <option value="cleanup">片つけ</option>
-            <option value="outside">そとのお仕事</option>
-          </select>
-        </label>
-        <div class="edit-actions">
-          <button class="secondary" type="button" id="deleteTaskBtn">削除</button>
-          <button class="primary" type="submit">保存</button>
-        </div>
-        <div class="edit-error" id="taskEditError" role="alert"></div>
-      </form>
-    </section>
-  </div>
   <div class="modal-backdrop hidden" id="infoModal" role="dialog" aria-modal="true" aria-labelledby="infoModalTitle">
     <section class="info-modal">
       <header>
@@ -2234,7 +2192,6 @@
     let activeBet = 1;
     let rotation = 0;
     let spinning = false;
-    let editingTaskId = null;
     let parentRewardDraft = {};
     let usePayAmount = { sweets: "", toy: "", game: "" };
 
@@ -2564,12 +2521,10 @@
           <div class="task-actions">
             <button class="task-action start" data-action="start" ${task.status !== "idle" ? "disabled" : ""}>はじめる</button>
             <button class="task-action finish" data-action="finish" ${task.status !== "inProgress" ? "disabled" : ""}>おわる</button>
-            <button class="task-action edit" data-action="edit">へんしゅう</button>
           </div>
         `;
         card.querySelector('[data-action="start"]').addEventListener("click", () => startTask(task.id));
         card.querySelector('[data-action="finish"]').addEventListener("click", () => finishTask(task.id));
-        card.querySelector('[data-action="edit"]').addEventListener("click", () => openTaskEditor(task.id));
         list.appendChild(card);
       });
     }
@@ -2990,24 +2945,6 @@
       showToast(`やったね！チケット${task.ticketReward}枚ゲット！`);
     }
 
-    function addTask() {
-      const task = {
-        id: `task-${Date.now()}`,
-        icon: icons[state.tasks.length % icons.length],
-        title: "新しいお手伝い",
-        difficulty: "easy",
-        ticketReward: 1,
-        category: activeTaskCategory === "all" ? "cleanup" : activeTaskCategory,
-        status: "idle",
-        isDefault: false
-      };
-      state.tasks.push(task);
-      upsertTaskHistory(task);
-      saveState();
-      render();
-      openTaskEditor(task.id);
-    }
-
     function resetDay() {
       state.tasks = state.tasks.map(task => ({ ...task, status: "idle" }));
       addHistory("今日のお手伝い状態をリセットしました。");
@@ -3112,68 +3049,6 @@
       showToast("きろくを消しました。");
     }
 
-    function openTaskEditor(taskId) {
-      const task = state.tasks.find(item => item.id === taskId);
-      if (!task) return;
-      editingTaskId = taskId;
-      document.getElementById("editTaskIcon").value = task.icon;
-      document.getElementById("editTaskTitle").value = task.title;
-      document.getElementById("editTaskDifficulty").value = task.difficulty;
-      document.getElementById("editTaskCategory").value = taskCategories.some(category => category.id === task.category && category.id !== "all") ? task.category : "cleanup";
-      document.getElementById("taskEditError").textContent = "";
-      document.getElementById("taskEditModal").classList.remove("hidden");
-    }
-
-    function closeTaskEditor() {
-      document.getElementById("taskEditModal").classList.add("hidden");
-      document.getElementById("taskEditError").textContent = "";
-      editingTaskId = null;
-    }
-
-    function saveTaskEditor(event) {
-      event.preventDefault();
-      const task = state.tasks.find(item => item.id === editingTaskId);
-      if (!task) return;
-      const title = document.getElementById("editTaskTitle").value.trim();
-      const difficulty = document.getElementById("editTaskDifficulty").value;
-      const category = document.getElementById("editTaskCategory").value;
-      const error = document.getElementById("taskEditError");
-
-      if (!title) {
-        error.textContent = "お手伝い名をいれてね";
-        return;
-      }
-
-      if (!["easy", "normal", "hard"].includes(difficulty)) {
-        error.textContent = "難易度をえらんでね";
-        return;
-      }
-
-      if (!taskCategories.some(taskCategory => taskCategory.id === category && taskCategory.id !== "all")) {
-        error.textContent = "カテゴリーをえらんでね";
-        return;
-      }
-
-      task.icon = document.getElementById("editTaskIcon").value.trim() || "⭐";
-      task.title = title;
-      task.difficulty = difficulty;
-      task.category = category;
-      upsertTaskHistory(task);
-      saveState();
-      render();
-      closeTaskEditor();
-      showToast("お手伝いを保存しました。");
-    }
-
-    function deleteEditingTask() {
-      if (!editingTaskId) return;
-      state.tasks = state.tasks.filter(task => task.id !== editingTaskId);
-      saveState();
-      render();
-      closeTaskEditor();
-      showToast("お手伝いを削除しました。");
-    }
-
     function showToast(message) {
       const toast = document.getElementById("toast");
       toast.textContent = message;
@@ -3274,24 +3149,16 @@
     document.getElementById("parentSettingsModal").addEventListener("click", event => {
       if (event.target.id === "parentSettingsModal") closeParentSettings();
     });
-    document.getElementById("taskEditForm").addEventListener("submit", saveTaskEditor);
     document.getElementById("loginForm").addEventListener("submit", saveChildName);
     document.getElementById("changeNameBtn").addEventListener("click", openNameLogin);
-    document.getElementById("taskEditClose").addEventListener("click", closeTaskEditor);
-    document.getElementById("deleteTaskBtn").addEventListener("click", deleteEditingTask);
-    document.getElementById("taskEditModal").addEventListener("click", event => {
-      if (event.target.id === "taskEditModal") closeTaskEditor();
-    });
     document.addEventListener("keydown", event => {
       if (event.key === "Escape") {
         closeInfoModal();
-        closeTaskEditor();
         closeTaskHistorySearch();
         closeParentSettings();
       }
     });
 
-    document.getElementById("addTaskBtn").addEventListener("click", addTask);
     document.getElementById("resetDayBtn").addEventListener("click", resetDay);
     document.getElementById("spinBtn").addEventListener("click", spinWheel);
     document.getElementById("clearHistoryBtn").addEventListener("click", clearHistory);
