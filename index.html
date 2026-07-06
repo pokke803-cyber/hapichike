@@ -774,6 +774,32 @@
       box-shadow: 0 6px 0 rgba(255, 111, 145, .14);
     }
 
+    .task-status-tabs {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 10px 0 12px;
+    }
+
+    .task-status-tab {
+      border: 3px solid #fff;
+      border-radius: 20px;
+      padding: 12px 14px;
+      background: rgba(255, 255, 255, .92);
+      color: #273043;
+      font-weight: 900;
+      box-shadow: 0 6px 0 rgba(39, 48, 67, .1);
+      cursor: pointer;
+    }
+
+    .task-status-tab.active {
+      background: linear-gradient(135deg, #ffd166, #ff8fab);
+      color: #fff;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .28);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 0 rgba(239, 35, 60, .22);
+    }
+
     .task-filter {
       display: flex;
       gap: 8px;
@@ -805,6 +831,36 @@
       background: linear-gradient(135deg, #38bdf8, #a78bfa);
       color: #fff;
       text-shadow: 0 2px 0 rgba(39, 48, 67, .28);
+    }
+
+    .completed-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .completed-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 11px 13px;
+      border: 2px solid rgba(255, 209, 102, .7);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .88);
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .08);
+      color: #23324d;
+      font-weight: 900;
+    }
+
+    .completed-row-title {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .completed-row-ticket {
+      flex: 0 0 auto;
+      color: #118a5f;
+      white-space: nowrap;
     }
 
     .parent-entry {
@@ -1988,6 +2044,7 @@
           <button class="secondary history-search-button" id="openTaskHistoryBtn">りれきから検索する🔍</button>
           <button class="secondary" id="resetDayBtn">今日の状態をリセット</button>
         </div>
+        <div class="task-status-tabs" id="taskStatusTabs" aria-label="お手伝いの状態"></div>
         <div class="task-filter" id="taskCategoryFilter" aria-label="お手伝いカテゴリー"></div>
         <div class="task-grid" id="taskList"></div>
         <div class="badge-row" id="badgeRow"></div>
@@ -2301,6 +2358,7 @@
     if (needsStateSave) saveState();
     let activeCategory = "snack";
     let activeTaskCategory = "all";
+    let activeStatusTab = "active";
     let activeBet = 1;
     let rotation = 0;
     let spinning = false;
@@ -2366,7 +2424,7 @@
           difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
           ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
           category,
-          status: ["idle", "inProgress", "done"].includes(task.status) ? task.status : (task.done ? "done" : "idle"),
+          status: normalizeTaskStatus(task.status, task.done),
           isDefault: Boolean(task.isDefault)
         };
       }
@@ -2380,9 +2438,19 @@
         difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
         ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
         category: normalizeCategory(task.category, legacyTitle, task.icon),
-        status: task.done ? "done" : "idle",
+        status: normalizeTaskStatus(task.status, task.done),
         isDefault: Boolean(task.isDefault)
       };
+    }
+
+    function normalizeTaskStatus(status, doneFlag = false) {
+      if (doneFlag || ["done", "completed", "finished"].includes(status)) return "done";
+      if (["inProgress", "doing"].includes(status)) return "inProgress";
+      return "idle";
+    }
+
+    function isTaskCompleted(task) {
+      return ["done", "completed", "finished"].includes(task.status);
     }
 
     function inferTaskCategory(title, icon = "") {
@@ -2519,6 +2587,7 @@
 
     function render() {
       renderAccount();
+      renderTaskStatusTabs();
       renderTaskFilters();
       renderTasks();
       renderRewards();
@@ -2606,12 +2675,29 @@
     function renderTasks() {
       const list = document.getElementById("taskList");
       list.innerHTML = "";
-      const visibleTasks = activeTaskCategory === "all"
+      const categoryTasks = activeTaskCategory === "all"
         ? state.tasks
         : state.tasks.filter(task => task.category === activeTaskCategory);
+      const visibleTasks = categoryTasks.filter(task => activeStatusTab === "completed" ? isTaskCompleted(task) : !isTaskCompleted(task));
 
       if (!visibleTasks.length) {
-        list.innerHTML = `<div class="log-item">このカテゴリーのお手伝いはまだありません。</div>`;
+        list.innerHTML = activeStatusTab === "completed"
+          ? `<div class="log-item">まだ終わったお手伝いはないよ。お手伝いが終わったらここに出るよ。</div>`
+          : `<div class="log-item">今日のお手伝いはぜんぶ終わったよ！すごい！</div>`;
+        return;
+      }
+
+      if (activeStatusTab === "completed") {
+        list.innerHTML = `
+          <div class="completed-list">
+            ${visibleTasks.map(task => `
+              <div class="completed-row">
+                <span class="completed-row-title">✅ ${escapeHtml(task.title)}</span>
+                <span class="completed-row-ticket">🎟️ ${Number(task.ticketReward) || 1}枚</span>
+              </div>
+            `).join("")}
+          </div>
+        `;
         return;
       }
 
@@ -2645,6 +2731,31 @@
       });
     }
 
+    function renderTaskStatusTabs() {
+      const tabs = document.getElementById("taskStatusTabs");
+      const categoryTasks = activeTaskCategory === "all"
+        ? state.tasks
+        : state.tasks.filter(task => task.category === activeTaskCategory);
+      const activeCount = categoryTasks.filter(task => !isTaskCompleted(task)).length;
+      const completedCount = categoryTasks.filter(isTaskCompleted).length;
+      const statusTabs = [
+        { id: "active", label: "🌟 やること", count: activeCount },
+        { id: "completed", label: "✅ おわった", count: completedCount }
+      ];
+
+      tabs.innerHTML = statusTabs.map(tab => `
+        <button class="task-status-tab ${activeStatusTab === tab.id ? "active" : ""}" data-status-tab="${tab.id}">${tab.label} ${tab.count}</button>
+      `).join("");
+
+      tabs.querySelectorAll("[data-status-tab]").forEach(button => {
+        button.addEventListener("click", () => {
+          activeStatusTab = button.dataset.statusTab;
+          renderTaskStatusTabs();
+          renderTasks();
+        });
+      });
+    }
+
     function renderTaskFilters() {
       const filter = document.getElementById("taskCategoryFilter");
       filter.innerHTML = taskCategories.map(category => {
@@ -2657,6 +2768,7 @@
       filter.querySelectorAll("[data-task-category]").forEach(button => {
         button.addEventListener("click", () => {
           activeTaskCategory = button.dataset.taskCategory;
+          renderTaskStatusTabs();
           renderTaskFilters();
           renderTasks();
         });
