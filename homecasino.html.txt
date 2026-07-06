@@ -910,6 +910,47 @@
       margin-top: 14px;
     }
 
+    .parent-menu-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .parent-menu-button {
+      border: 3px solid #fff;
+      border-radius: 22px;
+      padding: 16px;
+      background: linear-gradient(135deg, #fff8d6, #dff7ff);
+      color: #23324d;
+      font-weight: 900;
+      text-align: left;
+      box-shadow: 0 7px 0 rgba(39, 48, 67, .12);
+      cursor: pointer;
+    }
+
+    .parent-menu-button strong {
+      display: block;
+      font-size: 1.05rem;
+    }
+
+    .parent-edit-tools {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .parent-manage-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .danger-button {
+      color: #fff;
+      background: linear-gradient(135deg, #ef233c, #fb7185);
+    }
+
     .edit-form {
       display: grid;
       gap: 10px;
@@ -2055,6 +2096,22 @@
           <button class="primary" type="submit">入る</button>
         </div>
       </form>
+      <div class="info-modal-body parent-panel hidden" id="parentMenuPanel">
+        <p class="parent-note">おうちの人だけが使う管理メニューです。子ども画面には追加・編集・削除ボタンは表示されません。</p>
+        <div class="parent-menu-grid">
+          <button class="parent-menu-button" type="button" id="openParentTaskEditBtn">
+            <strong>お手伝い編集</strong>
+            追加・編集・削除、カテゴリー、難易度、TICKET枚数を設定できます。
+          </button>
+          <button class="parent-menu-button" type="button" id="openParentRewardOnlyBtn">
+            <strong>チケット枚数設定</strong>
+            TICKET枚数だけをまとめて変更できます。
+          </button>
+        </div>
+        <div class="parent-save-row">
+          <button class="secondary" type="button" id="parentMenuBackBtn">もどる</button>
+        </div>
+      </div>
       <div class="info-modal-body parent-panel hidden" id="parentRewardPanel">
         <p class="parent-note">お手伝いでもらえるチケット枚数だけを変更できます。名前・状態・カテゴリーはここでは変わりません。</p>
         <div class="parent-task-list" id="parentTaskList"></div>
@@ -2062,6 +2119,61 @@
         <div class="parent-save-row">
           <button class="secondary" type="button" id="parentRewardBackBtn">もどる</button>
           <button class="primary" type="button" id="saveParentRewardsBtn">保存</button>
+        </div>
+      </div>
+      <div class="info-modal-body parent-panel hidden" id="parentTaskEditPanel">
+        <div class="parent-edit-tools">
+          <p class="parent-note">登録済みのお手伝いを追加・編集・削除できます。作業中・完了の状態は編集しても保持します。</p>
+          <button class="primary" type="button" id="addParentTaskBtn">あたらしく追加</button>
+        </div>
+        <div class="parent-task-list" id="parentEditTaskList"></div>
+        <div class="parent-save-row">
+          <button class="secondary" type="button" id="parentTaskEditBackBtn">もどる</button>
+        </div>
+      </div>
+      <form class="info-modal-body edit-form parent-panel hidden" id="parentTaskFormPanel">
+        <p class="parent-note" id="parentTaskFormLead">お手伝いを編集します。</p>
+        <label>
+          お手伝い名
+          <input id="parentTaskTitleInput" autocomplete="off" required>
+        </label>
+        <label>
+          アイコン
+          <input id="parentTaskIconInput" maxlength="4" autocomplete="off" placeholder="🎟️">
+        </label>
+        <label>
+          カテゴリー
+          <select id="parentTaskCategoryInput">
+            <option value="creature">生き物</option>
+            <option value="cooking">りょうり</option>
+            <option value="laundry">洗だく</option>
+            <option value="cleanup">片つけ</option>
+            <option value="outside">そとのお仕事</option>
+          </select>
+        </label>
+        <label>
+          難易度
+          <select id="parentTaskDifficultyInput">
+            <option value="easy">かんたん</option>
+            <option value="normal">ふつう</option>
+            <option value="hard">むずかしい</option>
+          </select>
+        </label>
+        <div>
+          <strong>もらえるTICKET</strong>
+          <div class="ticket-choice-row" id="parentTaskRewardChoices"></div>
+        </div>
+        <div class="edit-error" id="parentTaskFormError" role="alert"></div>
+        <div class="edit-actions">
+          <button class="secondary" type="button" id="cancelParentTaskFormBtn">キャンセル</button>
+          <button class="primary" type="submit">保存</button>
+        </div>
+      </form>
+      <div class="info-modal-body parent-panel hidden" id="parentDeletePanel">
+        <p class="parent-note" id="parentDeleteText">このお手伝いを削除しますか？</p>
+        <div class="edit-actions">
+          <button class="secondary" type="button" id="cancelParentDeleteBtn">やめる</button>
+          <button class="primary danger-button" type="button" id="confirmParentDeleteBtn">削除する</button>
         </div>
       </div>
     </section>
@@ -2193,6 +2305,9 @@
     let rotation = 0;
     let spinning = false;
     let parentRewardDraft = {};
+    let parentEditingTaskId = null;
+    let parentDeleteTaskId = null;
+    let parentTaskRewardDraft = 1;
     let usePayAmount = { sweets: "", toy: "", game: "" };
 
     function loadState() {
@@ -2244,6 +2359,7 @@
         const category = normalizeCategory(task.category, task.title, task.icon);
         if (!task.category) needsStateSave = true;
         return {
+          ...task,
           id: task.id || `task-${Date.now()}-${index}`,
           icon: task.icon || "⭐",
           title: task.title,
@@ -2637,11 +2753,13 @@
 
     function openParentSettings() {
       parentRewardDraft = {};
+      parentEditingTaskId = null;
+      parentDeleteTaskId = null;
+      parentTaskRewardDraft = 1;
       document.getElementById("parentPasswordInput").value = "";
       document.getElementById("parentPasswordError").textContent = "";
       document.getElementById("parentRewardMessage").textContent = "";
-      document.getElementById("parentPasswordPanel").classList.remove("hidden");
-      document.getElementById("parentRewardPanel").classList.add("hidden");
+      showParentPanel("parentPasswordPanel");
       document.getElementById("parentSettingsModal").classList.remove("hidden");
       setTimeout(() => document.getElementById("parentPasswordInput").focus(), 0);
     }
@@ -2651,6 +2769,14 @@
       document.getElementById("parentPasswordError").textContent = "";
       document.getElementById("parentRewardMessage").textContent = "";
       parentRewardDraft = {};
+      parentEditingTaskId = null;
+      parentDeleteTaskId = null;
+    }
+
+    function showParentPanel(panelId) {
+      ["parentPasswordPanel", "parentMenuPanel", "parentRewardPanel", "parentTaskEditPanel", "parentTaskFormPanel", "parentDeletePanel"].forEach(id => {
+        document.getElementById(id).classList.toggle("hidden", id !== panelId);
+      });
     }
 
     function enterParentSettings(event) {
@@ -2671,9 +2797,7 @@
         return;
       }
 
-      document.getElementById("parentPasswordPanel").classList.add("hidden");
-      document.getElementById("parentRewardPanel").classList.remove("hidden");
-      renderParentRewardSettings();
+      showParentPanel("parentMenuPanel");
     }
 
     function renderParentRewardSettings() {
@@ -2745,6 +2869,164 @@
       renderParentRewardSettings();
       document.getElementById("parentRewardMessage").textContent = "チケット枚数を変更しました";
       showToast("チケット枚数を変更しました。");
+    }
+
+    function openParentMenu() {
+      showParentPanel("parentMenuPanel");
+    }
+
+    function openParentRewardSettings() {
+      parentRewardDraft = {};
+      document.getElementById("parentRewardMessage").textContent = "";
+      showParentPanel("parentRewardPanel");
+      renderParentRewardSettings();
+    }
+
+    function openParentTaskEditPage() {
+      showParentPanel("parentTaskEditPanel");
+      renderParentTaskEditList();
+    }
+
+    function renderParentTaskEditList() {
+      const list = document.getElementById("parentEditTaskList");
+      if (!state.tasks.length) {
+        list.innerHTML = `<div class="log-item">登録済みのお手伝いはまだありません。</div>`;
+        return;
+      }
+
+      list.innerHTML = state.tasks.map(task => `
+        <article class="parent-task-card">
+          <div class="parent-task-head">
+            <div class="parent-task-icon">${escapeHtml(task.icon)}</div>
+            <div>
+              <div class="parent-task-name">${escapeHtml(task.title)}</div>
+              <div class="task-meta">
+                <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
+                <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
+                <span class="status-badge ${task.status}">${getTaskStatusLabel(task.status)}</span>
+                <span class="status-badge idle">🎫 ${Number(task.ticketReward) || 1}枚</span>
+              </div>
+            </div>
+          </div>
+          <div class="parent-manage-actions">
+            <button class="task-action edit" type="button" data-parent-edit="${escapeHtml(task.id)}">編集</button>
+            <button class="task-action danger-button" type="button" data-parent-delete="${escapeHtml(task.id)}">削除</button>
+          </div>
+        </article>
+      `).join("");
+
+      list.querySelectorAll("[data-parent-edit]").forEach(button => {
+        button.addEventListener("click", () => openParentTaskForm(button.dataset.parentEdit));
+      });
+      list.querySelectorAll("[data-parent-delete]").forEach(button => {
+        button.addEventListener("click", () => openParentDeleteConfirm(button.dataset.parentDelete));
+      });
+    }
+
+    function openParentTaskForm(taskId = null) {
+      const task = state.tasks.find(item => item.id === taskId);
+      parentEditingTaskId = task ? task.id : null;
+      parentTaskRewardDraft = Number(task?.ticketReward) || 1;
+      document.getElementById("parentTaskFormLead").textContent = task ? "お手伝いを編集します。" : "新しいお手伝いを追加します。";
+      document.getElementById("parentTaskTitleInput").value = task?.title || "";
+      document.getElementById("parentTaskIconInput").value = task?.icon || "🎟️";
+      document.getElementById("parentTaskCategoryInput").value = task?.category || "cleanup";
+      document.getElementById("parentTaskDifficultyInput").value = task?.difficulty || "easy";
+      document.getElementById("parentTaskFormError").textContent = "";
+      showParentPanel("parentTaskFormPanel");
+      renderParentTaskRewardChoices();
+      setTimeout(() => document.getElementById("parentTaskTitleInput").focus(), 0);
+    }
+
+    function renderParentTaskRewardChoices() {
+      const row = document.getElementById("parentTaskRewardChoices");
+      row.innerHTML = [1, 2, 3, 4, 5].map(count => `
+        <button class="ticket-choice ${parentTaskRewardDraft === count ? "active" : ""}" type="button" data-parent-task-form-reward="${count}">${count}枚</button>
+      `).join("");
+      row.querySelectorAll("[data-parent-task-form-reward]").forEach(button => {
+        button.addEventListener("click", () => {
+          parentTaskRewardDraft = Number(button.dataset.parentTaskFormReward);
+          renderParentTaskRewardChoices();
+        });
+      });
+    }
+
+    function saveParentTaskForm(event) {
+      event.preventDefault();
+      const title = document.getElementById("parentTaskTitleInput").value.trim();
+      const icon = document.getElementById("parentTaskIconInput").value.trim() || "🎟️";
+      const category = document.getElementById("parentTaskCategoryInput").value;
+      const difficulty = document.getElementById("parentTaskDifficultyInput").value;
+      const reward = Number(parentTaskRewardDraft);
+      const error = document.getElementById("parentTaskFormError");
+
+      if (!title) {
+        error.textContent = "お手伝い名を入れてください";
+        return;
+      }
+      if (!taskCategories.some(item => item.id === category && item.id !== "all")) {
+        error.textContent = "カテゴリーを選んでください";
+        return;
+      }
+      if (!["easy", "normal", "hard"].includes(difficulty)) {
+        error.textContent = "難易度を選んでください";
+        return;
+      }
+      if (!Number.isInteger(reward) || reward < 1 || reward > 5) {
+        error.textContent = "TICKET枚数は1〜5枚で選んでください";
+        return;
+      }
+
+      const existing = state.tasks.find(task => task.id === parentEditingTaskId);
+      if (existing) {
+        existing.title = title;
+        existing.icon = icon;
+        existing.category = category;
+        existing.difficulty = difficulty;
+        existing.ticketReward = reward;
+        upsertTaskHistory(existing);
+        showToast("お手伝いを保存しました。");
+      } else {
+        const task = {
+          id: `task-${Date.now()}`,
+          title,
+          icon,
+          category,
+          difficulty,
+          ticketReward: reward,
+          status: "idle",
+          isDefault: false
+        };
+        state.tasks.push(task);
+        upsertTaskHistory(task);
+        showToast("お手伝いを追加しました。");
+      }
+
+      saveState();
+      render();
+      openParentTaskEditPage();
+    }
+
+    function openParentDeleteConfirm(taskId) {
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!task) return;
+      parentDeleteTaskId = taskId;
+      document.getElementById("parentDeleteText").textContent = `「${task.title}」を削除しますか？`;
+      showParentPanel("parentDeletePanel");
+    }
+
+    function confirmParentDelete() {
+      const task = state.tasks.find(item => item.id === parentDeleteTaskId);
+      if (!task) {
+        openParentTaskEditPage();
+        return;
+      }
+      state.tasks = state.tasks.filter(item => item.id !== parentDeleteTaskId);
+      parentDeleteTaskId = null;
+      saveState();
+      render();
+      openParentTaskEditPage();
+      showToast("お手伝いを削除しました。");
     }
 
     function getTaskStatusLabel(status) {
@@ -3144,7 +3426,16 @@
     document.getElementById("parentPasswordPanel").addEventListener("submit", enterParentSettings);
     document.getElementById("parentSettingsClose").addEventListener("click", closeParentSettings);
     document.getElementById("parentBackBtn").addEventListener("click", closeParentSettings);
-    document.getElementById("parentRewardBackBtn").addEventListener("click", closeParentSettings);
+    document.getElementById("parentMenuBackBtn").addEventListener("click", closeParentSettings);
+    document.getElementById("openParentTaskEditBtn").addEventListener("click", openParentTaskEditPage);
+    document.getElementById("openParentRewardOnlyBtn").addEventListener("click", openParentRewardSettings);
+    document.getElementById("parentRewardBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("parentTaskEditBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("addParentTaskBtn").addEventListener("click", () => openParentTaskForm());
+    document.getElementById("parentTaskFormPanel").addEventListener("submit", saveParentTaskForm);
+    document.getElementById("cancelParentTaskFormBtn").addEventListener("click", openParentTaskEditPage);
+    document.getElementById("cancelParentDeleteBtn").addEventListener("click", openParentTaskEditPage);
+    document.getElementById("confirmParentDeleteBtn").addEventListener("click", confirmParentDelete);
     document.getElementById("saveParentRewardsBtn").addEventListener("click", saveParentRewards);
     document.getElementById("parentSettingsModal").addEventListener("click", event => {
       if (event.target.id === "parentSettingsModal") closeParentSettings();
