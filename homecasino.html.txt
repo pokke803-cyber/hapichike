@@ -1166,14 +1166,15 @@
       top: 50%;
       width: 42%;
       transform-origin: 0 0;
-      color: #fff;
-      text-shadow: 0 2px 0 rgba(17, 24, 39, .78), 0 0 5px rgba(17, 24, 39, .4);
+      color: #172033;
+      text-shadow: 0 1px 0 #fff, 0 0 5px rgba(255, 255, 255, .75);
       font-size: .78rem;
       font-weight: 900;
       text-align: right;
-      padding-right: 12px;
+      padding: 2px 12px 2px 4px;
       z-index: 2;
       pointer-events: none;
+      -webkit-text-stroke: .45px rgba(255, 255, 255, .92);
     }
 
     .spin-button {
@@ -2330,7 +2331,16 @@
       zero: "#9ca3af",
       plusOne: "#ffd166",
       plusTwo: "#22c55e",
-      plusHigh: "#38bdf8"
+      plusThree: "#2dd4bf",
+      plusFour: "#38bdf8",
+      plusFive: "#3b82f6",
+      plusSix: "#8b5cf6",
+      plusEight: "#fb923c",
+      plusTen: "#ef4444",
+      plusTwelve: "#6ee7b7",
+      plusFifteen: "#ec4899",
+      plusTwenty: "#f59e0b",
+      happyChance: "#ff8fab"
     };
 
     const infoContents = {
@@ -3381,11 +3391,22 @@
     }
 
     function getSegmentColor(segment) {
-      if (segment.type === "happyChance") return "#ff8fab";
-      if (segment.points === 0) return pointColors.zero;
-      if (segment.points === 1) return pointColors.plusOne;
-      if (segment.points === 2) return pointColors.plusTwo;
-      return pointColors.plusHigh;
+      if (segment.type === "happyChance") return pointColors.happyChance;
+      const colorsByPoint = {
+        0: pointColors.zero,
+        1: pointColors.plusOne,
+        2: pointColors.plusTwo,
+        3: pointColors.plusThree,
+        4: pointColors.plusFour,
+        5: pointColors.plusFive,
+        6: pointColors.plusSix,
+        8: pointColors.plusEight,
+        10: pointColors.plusTen,
+        12: pointColors.plusTwelve,
+        15: pointColors.plusFifteen,
+        20: pointColors.plusTwenty
+      };
+      return colorsByPoint[segment.points] || pointColors.plusFour;
     }
 
     function getResultClass(segment) {
