@@ -1205,7 +1205,7 @@
 
     .roulette-dashboard {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
       margin-bottom: 14px;
     }
@@ -1328,7 +1328,31 @@
 
     .segment-chip.rare { border-color: #ef233c; color: #ef233c; }
     .segment-chip.safe { color: #64748b; }
-    .segment-chip.minus { color: #0f172a; background: #f1f5f9; }
+    .segment-chip.chance {
+      color: #7c3aed;
+      background: linear-gradient(135deg, #fff, #ffe4f3);
+      border-color: #ff8fab;
+    }
+
+    .happy-card-action {
+      width: 100%;
+      margin-top: 10px;
+      min-height: 42px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ff8fab, #ffd166);
+      color: #fff;
+      font-weight: 900;
+      cursor: pointer;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .3);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,.7), 0 6px 0 rgba(239, 35, 60, .18);
+    }
+
+    .happy-card-action:disabled {
+      cursor: not-allowed;
+      opacity: .58;
+      box-shadow: none;
+    }
 
     #luckyText {
       display: block;
@@ -1355,12 +1379,6 @@
     #luckyText.result-miss {
       color: #64748b;
       background: linear-gradient(135deg, #ffffff, #f8fafc);
-    }
-
-    #luckyText.result-minus {
-      color: #273043;
-      background: linear-gradient(135deg, #ffffff, #fff8d6);
-      outline-color: rgba(239, 35, 60, .35);
     }
 
     .roulette-side {
@@ -2061,6 +2079,7 @@
           <div class="roulette-stat">🎟️ 所持チケット<span id="ticketCountDisplay">0</span></div>
           <div class="roulette-stat">🎯 選択中<span id="activeCategoryDisplay">お菓子</span></div>
           <div class="roulette-stat">🔥 BET<span id="activeBetDisplay">1</span></div>
+          <div class="roulette-stat">💖 ハピチャンカード<span id="happyChanceDisplay">0枚</span></div>
         </div>
         <div class="point-row" id="pointRow"></div>
         <div class="casino-table">
@@ -2271,48 +2290,42 @@
 
     const betTables = {
       1: [
-        { points: 1, weight: 22, tone: "plus" },
-        { points: 2, weight: 14, tone: "plus" },
-        { points: 3, weight: 7, tone: "rare" },
-        { points: 0, weight: 16, tone: "safe" },
-        { points: -1, weight: 9, tone: "minus" }
+        { points: 1, weight: 4, tone: "plus" },
+        { points: 2, weight: 2, tone: "plus" },
+        { points: 0, weight: 2, tone: "safe" },
+        { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ],
       2: [
-        { points: 2, weight: 22, tone: "plus" },
-        { points: 4, weight: 13, tone: "plus" },
-        { points: 6, weight: 6, tone: "rare" },
-        { points: 0, weight: 16, tone: "safe" },
-        { points: -2, weight: 9, tone: "minus" }
+        { points: 2, weight: 4, tone: "plus" },
+        { points: 4, weight: 2, tone: "plus" },
+        { points: 0, weight: 2, tone: "safe" },
+        { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ],
       3: [
-        { points: 3, weight: 21, tone: "plus" },
-        { points: 5, weight: 13, tone: "plus" },
-        { points: 8, weight: 6, tone: "rare" },
-        { points: 0, weight: 15, tone: "safe" },
-        { points: -2, weight: 9, tone: "minus" },
-        { points: -4, weight: 4, tone: "minus rare" }
+        { points: 3, weight: 4, tone: "plus" },
+        { points: 5, weight: 3, tone: "plus" },
+        { points: 8, weight: 1, tone: "rare" },
+        { points: 0, weight: 2, tone: "safe" },
+        { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ],
       4: [
-        { points: 4, weight: 21, tone: "plus" },
-        { points: 8, weight: 12, tone: "plus" },
-        { points: 12, weight: 5, tone: "rare" },
-        { points: 0, weight: 15, tone: "safe" },
-        { points: -4, weight: 9, tone: "minus" },
-        { points: -6, weight: 4, tone: "minus rare" }
+        { points: 4, weight: 4, tone: "plus" },
+        { points: 8, weight: 3, tone: "plus" },
+        { points: 12, weight: 1, tone: "rare" },
+        { points: 0, weight: 2, tone: "safe" },
+        { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ],
       5: [
-        { points: 5, weight: 21, tone: "plus" },
-        { points: 10, weight: 12, tone: "plus" },
-        { points: 15, weight: 6, tone: "rare" },
-        { points: 20, weight: 3, tone: "rare" },
-        { points: 0, weight: 15, tone: "safe" },
-        { points: -5, weight: 9, tone: "minus" },
-        { points: -10, weight: 4, tone: "minus rare" }
+        { points: 5, weight: 4, tone: "plus" },
+        { points: 10, weight: 3, tone: "plus" },
+        { points: 15, weight: 1, tone: "rare" },
+        { points: 20, weight: 1, tone: "rare" },
+        { points: 0, weight: 2, tone: "safe" },
+        { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ]
     };
 
     const pointColors = {
-      minus: "#ef233c",
       zero: "#9ca3af",
       plusOne: "#ffd166",
       plusTwo: "#22c55e",
@@ -2338,8 +2351,9 @@
           <ul>
             <li>本物のお金・課金・賭けごとはありません。</li>
             <li>これは、お手伝いチケットで遊ぶごほうびルーレットです。</li>
-            <li>マイナスが出ても、ポイントは0より下にはなりません。</li>
-            <li>BETが大きいほど、増えるポイントも減るポイントも大きくなります。</li>
+            <li>ポイントはそのまま安心です。</li>
+            <li>ハピチャンカードは、次の結果に+1Pできるお助けカードです。</li>
+            <li>BETが大きいほど、大きなポイントのチャンスがあります。</li>
             <li>ごほうびは家族と相談して楽しく使いましょう。</li>
           </ul>
         `
@@ -2362,6 +2376,7 @@
     let activeBet = 1;
     let rotation = 0;
     let spinning = false;
+    let latestRouletteResult = null;
     let parentRewardDraft = {};
     let parentEditingTaskId = null;
     let parentDeleteTaskId = null;
@@ -2386,6 +2401,7 @@
         taskHistory: normalizeTaskHistory(saved.taskHistory, saved.tasks),
         parentPassword: String(saved.parentPassword || "1234"),
         badges: Array.isArray(saved.badges) ? saved.badges : [],
+        happyChanceCards: Math.max(0, Number(saved.happyChanceCards) || 0),
         points: {
           snack: Number(saved.points?.snack) || 0,
           toy: Number(saved.points?.toy) || 0,
@@ -2603,6 +2619,7 @@
       document.getElementById("ticketCountDisplay").textContent = state.coins;
       document.getElementById("activeCategoryDisplay").textContent = categories[activeCategory].label;
       document.getElementById("activeBetDisplay").textContent = activeBet;
+      document.getElementById("happyChanceDisplay").textContent = `${state.happyChanceCards}枚`;
       document.getElementById("spinBtn").disabled = state.coins < activeBet || spinning;
       document.getElementById("doneCount").textContent = done;
       document.getElementById("taskTotal").textContent = state.tasks.length;
@@ -3229,7 +3246,8 @@
       `;
     }
 
-    function getSegmentIcon(points) {
+    function getSegmentIcon(points, type = "") {
+      if (type === "happyChance") return "💖";
       if (points > 12) return "🎉";
       if (points > 0) return "⭐";
       if (points === 0) return "🎟️";
@@ -3237,33 +3255,39 @@
     }
 
     function getSegmentColor(segment) {
-      if (segment.points < 0) return pointColors.minus;
+      if (segment.type === "happyChance") return "#ff8fab";
       if (segment.points === 0) return pointColors.zero;
       if (segment.points === 1) return pointColors.plusOne;
       if (segment.points === 2) return pointColors.plusTwo;
       return pointColors.plusHigh;
     }
 
-    function getResultClass(points) {
+    function getResultClass(segment) {
+      if (segment.type === "happyChance") return "result-good";
+      const points = segment.points;
       if (points > 0) return "result-good";
-      if (points < 0) return "result-minus";
       return "result-miss";
     }
 
-    function getResultMessage(category, rawPoints, before, after) {
-      if (rawPoints > 0) return `やったね！ ${category.pointName} ${formatPoints(rawPoints)}！ ${before} → ${after}`;
-      if (rawPoints < 0) return `ざんねん、次はがんばろう！ ${category.pointName} ${formatPoints(rawPoints)} / ${before} → ${after}`;
-      return `今回は0P。でもチケットが1まい戻ってきたよ！ ${before} → ${after}`;
+    function getResultMessage(category, segment, before, after) {
+      if (segment.type === "happyChance") return `ハピチャンス！ハピチャンカードを1枚ゲット！次回+1Pできるよ！`;
+      if (segment.points > 0) return `やったね！ ${category.pointName} ${formatPoints(segment.points)}！ ${before} → ${after}`;
+      return `ポイントはそのまま！チケットが1まい戻ってきたよ。次はチャンス！ ${before} → ${after}`;
     }
 
     function getCurrentSegments() {
       return betTables[activeBet].map((segment, index) => ({
         ...segment,
         id: index,
-        label: segment.points > 0 ? `+${segment.points}P` : `${segment.points}P`,
-        icon: getSegmentIcon(segment.points),
+        label: getSegmentLabel(segment),
+        icon: getSegmentIcon(segment.points, segment.type),
         color: getSegmentColor(segment)
       }));
+    }
+
+    function getSegmentLabel(segment) {
+      if (segment.type === "happyChance") return "ハピチャン";
+      return segment.points > 0 ? `+${segment.points}P` : `${segment.points}P`;
     }
 
     function formatPoints(points) {
@@ -3286,7 +3310,7 @@
         label.className = "wheel-label";
         const labelDeg = currentDeg + size / 2 - 90;
         label.style.transform = `rotate(${labelDeg.toFixed(2)}deg) translate(-4px, -50%)`;
-        label.innerHTML = `${segment.icon}<br>${formatPoints(segment.points)}`;
+        label.innerHTML = `${segment.icon}<br>${escapeHtml(segment.label)}`;
         wheel.appendChild(label);
         currentDeg = endDeg;
       });
@@ -3297,9 +3321,14 @@
       return `
         <div class="segment-chip ${segment.tone}" style="border-color: ${segment.color};">
           <span>出たマス</span>
-          <span>${segment.icon} ${formatPoints(segment.points)}</span>
+          <span>${segment.icon} ${escapeHtml(segment.label)}</span>
         </div>
       `;
+    }
+
+    function createHappyChanceButtonHtml() {
+      if (!latestRouletteResult || latestRouletteResult.used || !latestRouletteResult.canUseCard || state.happyChanceCards <= 0) return "";
+      return `<button class="happy-card-action" id="useHappyChanceBtn" type="button">💖 ハピチャンカードを使う（+1P）</button>`;
     }
 
     function weightedPick(segments) {
@@ -3354,6 +3383,8 @@
         return;
       }
       spinning = true;
+      latestRouletteResult = null;
+      const cardsBeforeSpin = state.happyChanceCards;
       state.coins -= activeBet;
       updateStats();
       const segments = getCurrentSegments();
@@ -3368,30 +3399,62 @@
       setTimeout(() => {
         const category = categories[activeCategory];
         const before = state.points[activeCategory];
-        const after = Math.max(0, before + picked.segment.points);
+        const after = picked.segment.type === "happyChance" ? before : before + picked.segment.points;
         const actualChange = after - before;
         state.points[activeCategory] = after;
-        const ticketBonus = picked.segment.points === 0 ? 1 : 0;
+        const ticketBonus = picked.segment.points === 0 && picked.segment.type !== "happyChance" ? 1 : 0;
         if (ticketBonus) state.coins += ticketBonus;
+        if (picked.segment.type === "happyChance") state.happyChanceCards += 1;
+        latestRouletteResult = {
+          category: activeCategory,
+          used: false,
+          canUseCard: picked.segment.type !== "happyChance" && cardsBeforeSpin > 0
+        };
         const resultBox = document.getElementById("luckyText");
-        resultBox.className = getResultClass(picked.segment.points);
+        resultBox.className = getResultClass(picked.segment);
         resultBox.innerHTML = `
-          <span>${category.emoji} ${getResultMessage(category, picked.segment.points, before, after)}</span>
+          <span>${category.emoji} ${getResultMessage(category, picked.segment, before, after)}</span>
           ${createResultSegmentHtml(picked.segment)}
+          ${createHappyChanceButtonHtml()}
         `;
-        addHistory(`${category.label}ルーレット BET${activeBet}: ${formatPoints(picked.segment.points)}（実際の変化 ${formatPoints(actualChange)}${ticketBonus ? " / チケット +1" : ""}）`);
+        const chanceText = picked.segment.type === "happyChance" ? " / ハピチャンカード +1" : "";
+        addHistory(`${category.label}ルーレット BET${activeBet}: ${picked.segment.label}（実際の変化 ${formatPoints(actualChange)}${ticketBonus ? " / チケット +1" : ""}${chanceText}）`);
         saveState();
         spinning = false;
         render();
         if (picked.segment.points > 0) burstConfetti();
-        if (picked.segment.points > 0) {
+        if (picked.segment.type === "happyChance") {
+          burstConfetti();
+          showToast("ハピチャンカードを1枚ゲット！次回+1Pできるよ！");
+        } else if (picked.segment.points > 0) {
           showToast(`${category.pointName} ${formatPoints(picked.segment.points)}！`);
-        } else if (picked.segment.points < 0) {
-          showToast(`ざんねん、${category.pointName} ${formatPoints(picked.segment.points)}。次はがんばろう！`);
         } else {
-          showToast("今回は0P。チケットが1まい戻ってきたよ！");
+          showToast("ポイントはそのまま！チケットが1まい戻ってきたよ。");
         }
       }, 3700);
+    }
+
+    function useHappyChanceCard() {
+      if (!latestRouletteResult || latestRouletteResult.used || !latestRouletteResult.canUseCard || state.happyChanceCards <= 0) return;
+      const categoryKey = latestRouletteResult.category;
+      const category = categories[categoryKey];
+      state.happyChanceCards -= 1;
+      state.points[categoryKey] += 1;
+      latestRouletteResult.used = true;
+      latestRouletteResult.canUseCard = false;
+      const resultBox = document.getElementById("luckyText");
+      const button = document.getElementById("useHappyChanceBtn");
+      if (button) {
+        button.disabled = true;
+        button.textContent = "💖 カードで+1Pしたよ！";
+      }
+      resultBox.insertAdjacentHTML("beforeend", `<div class="segment-chip chance"><span>ハピチャンカード</span><span>💖 +1P</span></div>`);
+      addHistory(`${category.label}ルーレット: ハピチャンカードで ${category.pointName} +1`);
+      saveState();
+      renderPoints();
+      updateStats();
+      burstConfetti();
+      showToast("やったね！カードで1Pアップ！");
     }
 
     function setPayMessage(payId, message, type = "") {
@@ -3498,6 +3561,7 @@
       button.addEventListener("click", () => {
         if (spinning) return;
         activeCategory = button.dataset.category;
+        latestRouletteResult = null;
         const resultBox = document.getElementById("luckyText");
         resultBox.className = "";
         resultBox.textContent = `${categories[activeCategory].emoji} ${categories[activeCategory].label}ルーレットを選びました`;
@@ -3511,6 +3575,7 @@
       button.addEventListener("click", () => {
         if (spinning) return;
         activeBet = Number(button.dataset.bet);
+        latestRouletteResult = null;
         const resultBox = document.getElementById("luckyText");
         resultBox.className = "";
         resultBox.textContent = `BET${activeBet}を選びました。チケットを${activeBet}まい使います。`;
@@ -3522,6 +3587,10 @@
 
     document.querySelectorAll(".info-button").forEach(button => {
       button.addEventListener("click", () => openInfoModal(button.dataset.info));
+    });
+
+    document.addEventListener("click", event => {
+      if (event.target?.id === "useHappyChanceBtn") useHappyChanceCard();
     });
 
     document.getElementById("infoModalClose").addEventListener("click", closeInfoModal);
