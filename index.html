@@ -776,7 +776,7 @@
 
     .task-status-tabs {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
       margin: 10px 0 12px;
     }
@@ -1906,6 +1906,7 @@
       .subtitle { max-width: calc(100% - 112px); }
       .status-bar { grid-template-columns: 1fr; }
       .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .task-status-tabs { grid-template-columns: 1fr; }
       .category-tabs, .point-row { grid-template-columns: 1fr; }
       .roulette-dashboard { grid-template-columns: 1fr; }
       .casino-table { grid-template-columns: 1fr; }
@@ -2057,7 +2058,7 @@
       </nav>
 
       <section class="panel active" id="tasks">
-        <h2 class="panel-title"><span>🎟️</span><span id="taskSectionTitle">今日のお手伝い</span></h2>
+        <h2 class="panel-title"><span>🎟️</span><span id="taskSectionTitle">お手伝い</span></h2>
         <div class="task-tools">
           <button class="secondary history-search-button" id="openTaskHistoryBtn">りれきから検索する🔍</button>
           <button class="secondary" id="resetDayBtn">今日の状態をリセット</button>
@@ -2372,7 +2373,7 @@
     if (needsStateSave) saveState();
     let activeCategory = "snack";
     let activeTaskCategory = "all";
-    let activeStatusTab = "active";
+    let activeStatusTab = hasOpenTodayTasks() ? "active" : "library";
     let activeBet = 1;
     let rotation = 0;
     let spinning = false;
@@ -2392,13 +2393,16 @@
     }
 
     function normalizeState(saved) {
+      const tasks = Array.isArray(saved.tasks) ? normalizeTasks(saved.tasks) : defaultTasks.map(task => ({ ...task }));
+      const todayTasks = normalizeTodayTasks(saved.todayTasks, tasks);
       return {
         childName: sanitizeName(saved.childName || ""),
         coins: Number(saved.coins) || 0,
-        tasks: Array.isArray(saved.tasks) ? normalizeTasks(saved.tasks) : defaultTasks.map(task => ({ ...task })),
+        tasks,
+        todayTasks,
         history: Array.isArray(saved.history) ? saved.history : [],
         payLogs: Array.isArray(saved.payLogs) ? saved.payLogs : [],
-        taskHistory: normalizeTaskHistory(saved.taskHistory, saved.tasks),
+        taskHistory: normalizeTaskHistory(saved.taskHistory, tasks),
         parentPassword: String(saved.parentPassword || "1234"),
         badges: Array.isArray(saved.badges) ? saved.badges : [],
         happyChanceCards: Math.max(0, Number(saved.happyChanceCards) || 0),
@@ -2408,6 +2412,38 @@
           game: Number(saved.points?.game) || 0
         }
       };
+    }
+
+    function normalizeTodayTasks(savedTodayTasks, tasks) {
+      const taskIds = new Set(tasks.map(task => task.id));
+      if (Array.isArray(savedTodayTasks)) {
+        return savedTodayTasks
+          .filter(item => item && taskIds.has(item.taskId))
+          .map(item => ({
+            taskId: item.taskId,
+            status: normalizeTaskStatus(item.status),
+            startedAt: item.startedAt || "",
+            completedAt: item.completedAt || "",
+            ticketReward: Math.min(5, Math.max(1, Number(item.ticketReward) || Number(tasks.find(task => task.id === item.taskId)?.ticketReward) || 1)),
+            ticketGranted: Boolean(item.ticketGranted)
+          }));
+      }
+
+      const migrated = tasks
+        .filter(task => normalizeTaskStatus(task.status, task.done) !== "idle")
+        .map(task => {
+          const status = normalizeTaskStatus(task.status, task.done);
+          return {
+            taskId: task.id,
+            status,
+            startedAt: "",
+            completedAt: status === "done" ? todayString() : "",
+            ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+            ticketGranted: status === "done"
+          };
+        });
+      if (migrated.length) needsStateSave = true;
+      return migrated;
     }
 
     function normalizeTasks(tasks) {
@@ -2614,7 +2650,7 @@
     }
 
     function updateStats() {
-      const done = state.tasks.filter(task => task.status === "done").length;
+      const done = state.todayTasks.filter(item => isTaskCompleted(item)).length;
       document.getElementById("coinCount").textContent = state.coins;
       document.getElementById("ticketCountDisplay").textContent = state.coins;
       document.getElementById("activeCategoryDisplay").textContent = categories[activeCategory].label;
@@ -2622,7 +2658,7 @@
       document.getElementById("happyChanceDisplay").textContent = `${state.happyChanceCards}枚`;
       document.getElementById("spinBtn").disabled = state.coins < activeBet || spinning;
       document.getElementById("doneCount").textContent = done;
-      document.getElementById("taskTotal").textContent = state.tasks.length;
+      document.getElementById("taskTotal").textContent = state.todayTasks.length;
       document.getElementById("levelText").textContent = Math.max(1, Math.floor((state.history.length + state.coins) / 6) + 1);
       renderBadges(done);
     }
@@ -2637,11 +2673,11 @@
       if (name) {
         loginScreen.classList.add("hidden");
         greeting.textContent = `こんにちは、${name}！`;
-        taskTitle.textContent = `${name}の今日のお手伝い`;
+        taskTitle.textContent = `${name}のお手伝い`;
       } else {
         loginScreen.classList.remove("hidden");
         greeting.textContent = "こんにちは！";
-        taskTitle.textContent = "今日のお手伝い";
+        taskTitle.textContent = "お手伝い";
         nameInput.value = "";
         setTimeout(() => nameInput.focus(), 0);
       }
@@ -2689,28 +2725,89 @@
       });
     }
 
+    function hasOpenTodayTasks() {
+      return Array.isArray(state.todayTasks) && state.todayTasks.some(item => !isTaskCompleted(item));
+    }
+
+    function getTaskById(taskId) {
+      return state.tasks.find(task => task.id === taskId);
+    }
+
+    function getCategoryFilteredTasks(tasks) {
+      return activeTaskCategory === "all" ? tasks : tasks.filter(task => task.category === activeTaskCategory);
+    }
+
+    function getTodayEntry(taskId) {
+      return state.todayTasks.find(item => item.taskId === taskId);
+    }
+
+    function isTaskInTodayList(taskId) {
+      return Boolean(getTodayEntry(taskId));
+    }
+
+    function getTodayTaskItems(mode) {
+      return state.todayTasks
+        .map(today => ({ today, task: getTaskById(today.taskId) }))
+        .filter(item => item.task)
+        .filter(({ today }) => mode === "completed" ? isTaskCompleted(today) : !isTaskCompleted(today))
+        .filter(({ task }) => activeTaskCategory === "all" || task.category === activeTaskCategory);
+    }
+
     function renderTasks() {
       const list = document.getElementById("taskList");
       list.innerHTML = "";
-      const categoryTasks = activeTaskCategory === "all"
-        ? state.tasks
-        : state.tasks.filter(task => task.category === activeTaskCategory);
-      const visibleTasks = categoryTasks.filter(task => activeStatusTab === "completed" ? isTaskCompleted(task) : !isTaskCompleted(task));
+      if (activeStatusTab === "library") {
+        const candidates = getCategoryFilteredTasks(state.tasks);
+        if (!candidates.length) {
+          list.innerHTML = `<div class="log-item">このカテゴリーのお手伝い候補はまだないよ。</div>`;
+          return;
+        }
 
-      if (!visibleTasks.length) {
+        candidates.forEach(task => {
+          const added = isTaskInTodayList(task.id);
+          const card = document.createElement("article");
+          card.className = "task-card";
+          card.innerHTML = `
+            <div class="task-top">
+              <div class="task-art">${escapeHtml(task.icon)}</div>
+              <div>
+                <div class="task-name-display">${escapeHtml(task.title)}</div>
+                <div class="task-meta">
+                  <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
+                  <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
+                </div>
+              </div>
+            </div>
+            <div class="ticket-reward">
+              <span class="ticket-icons">${renderTicketIcons(task.ticketReward)}</span>
+              <span>チケット ${task.ticketReward}枚</span>
+            </div>
+            <div class="task-actions">
+              <button class="task-action start" data-action="add-today" ${added ? "disabled" : ""}>${added ? "今日のリストに入ってるよ" : "やることに追加"}</button>
+            </div>
+          `;
+          card.querySelector('[data-action="add-today"]').addEventListener("click", () => addTaskToToday(task.id));
+          list.appendChild(card);
+        });
+        return;
+      }
+
+      const todayItems = getTodayTaskItems(activeStatusTab);
+
+      if (!todayItems.length) {
         list.innerHTML = activeStatusTab === "completed"
           ? `<div class="log-item">まだ終わったお手伝いはないよ。お手伝いが終わったらここに出るよ。</div>`
-          : `<div class="log-item">今日のお手伝いはぜんぶ終わったよ！すごい！</div>`;
+          : `<div class="log-item">今日はまだ選んでいないよ。お手伝いリストから、やりたいお手伝いを選んでね。</div>`;
         return;
       }
 
       if (activeStatusTab === "completed") {
         list.innerHTML = `
           <div class="completed-list">
-            ${visibleTasks.map(task => `
+            ${todayItems.map(({ task, today }) => `
               <div class="completed-row">
                 <span class="completed-row-title">✅ ${escapeHtml(task.title)}</span>
-                <span class="completed-row-ticket">🎟️ ${Number(task.ticketReward) || 1}枚</span>
+                <span class="completed-row-ticket">🎟️ ${Number(today.ticketReward || task.ticketReward) || 1}枚</span>
               </div>
             `).join("")}
           </div>
@@ -2718,9 +2815,9 @@
         return;
       }
 
-      visibleTasks.forEach(task => {
+      todayItems.forEach(({ task, today }) => {
         const card = document.createElement("article");
-        card.className = `task-card ${task.status === "inProgress" ? "in-progress" : ""} ${task.status === "done" ? "done" : ""}`;
+        card.className = `task-card ${today.status === "inProgress" ? "in-progress" : ""}`;
         card.innerHTML = `
           <div class="task-top">
             <div class="task-art">${escapeHtml(task.icon)}</div>
@@ -2729,7 +2826,7 @@
               <div class="task-meta">
                 <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
                 <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
-                <span class="status-badge ${task.status}">${getTaskStatusLabel(task.status)}</span>
+                <span class="status-badge ${today.status}">${getTaskStatusLabel(today.status)}</span>
               </div>
             </div>
           </div>
@@ -2738,8 +2835,8 @@
             <span>チケット ${task.ticketReward}枚</span>
           </div>
           <div class="task-actions">
-            <button class="task-action start" data-action="start" ${task.status !== "idle" ? "disabled" : ""}>はじめる</button>
-            <button class="task-action finish" data-action="finish" ${task.status !== "inProgress" ? "disabled" : ""}>おわる</button>
+            <button class="task-action start" data-action="start" ${today.status !== "idle" ? "disabled" : ""}>はじめる</button>
+            <button class="task-action finish" data-action="finish" ${today.status !== "inProgress" ? "disabled" : ""}>おわる</button>
           </div>
         `;
         card.querySelector('[data-action="start"]').addEventListener("click", () => startTask(task.id));
@@ -2750,12 +2847,11 @@
 
     function renderTaskStatusTabs() {
       const tabs = document.getElementById("taskStatusTabs");
-      const categoryTasks = activeTaskCategory === "all"
-        ? state.tasks
-        : state.tasks.filter(task => task.category === activeTaskCategory);
-      const activeCount = categoryTasks.filter(task => !isTaskCompleted(task)).length;
-      const completedCount = categoryTasks.filter(isTaskCompleted).length;
+      const libraryCount = getCategoryFilteredTasks(state.tasks).length;
+      const activeCount = getTodayTaskItems("active").length;
+      const completedCount = getTodayTaskItems("completed").length;
       const statusTabs = [
+        { id: "library", label: "📋 お手伝いリスト", count: libraryCount },
         { id: "active", label: "🌟 やること", count: activeCount },
         { id: "completed", label: "✅ おわった", count: completedCount }
       ];
@@ -2850,7 +2946,10 @@
 
     function isTaskAlreadyToday(historyItem) {
       const key = getTaskHistoryKey(historyItem);
-      return state.tasks.some(task => getTaskHistoryKey(task) === key);
+      return state.todayTasks.some(today => {
+        const task = getTaskById(today.taskId);
+        return task && getTaskHistoryKey(task) === key;
+      });
     }
 
     function addTaskFromHistory(historyId) {
@@ -2860,24 +2959,51 @@
         return;
       }
 
-      const task = {
-        id: `task-${Date.now()}`,
-        icon: item.icon || "⭐",
-        title: item.title,
-        difficulty: item.difficulty,
-        ticketReward: Math.min(5, Math.max(1, Number(item.ticketReward) || 1)),
-        category: normalizeCategory(item.category, item.title, item.icon),
-        status: "idle",
-        isDefault: false
-      };
-      state.tasks.push(task);
+      const key = getTaskHistoryKey(item);
+      let task = state.tasks.find(candidate => getTaskHistoryKey(candidate) === key);
+      if (!task) {
+        task = {
+          id: `task-${Date.now()}`,
+          icon: item.icon || "⭐",
+          title: item.title,
+          difficulty: item.difficulty,
+          ticketReward: Math.min(5, Math.max(1, Number(item.ticketReward) || 1)),
+          category: normalizeCategory(item.category, item.title, item.icon),
+          status: "idle",
+          isDefault: false
+        };
+        state.tasks.push(task);
+      }
+      addTaskToToday(task.id, { silent: true });
       upsertTaskHistory(task);
       addHistory(`りれきから「${task.title}」を今日に追加しました。`);
       saveState();
       activeTaskCategory = "all";
+      activeStatusTab = "active";
       render();
       renderTaskHistorySearch();
       showToast(`「${task.title}」を今日に追加しました。`);
+    }
+
+    function addTaskToToday(taskId, options = {}) {
+      const task = getTaskById(taskId);
+      if (!task || isTaskInTodayList(taskId)) return;
+      state.todayTasks.push({
+        taskId,
+        status: "idle",
+        startedAt: "",
+        completedAt: "",
+        ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+        ticketGranted: false
+      });
+      upsertTaskHistory(task);
+      if (!options.silent) {
+        addHistory(`「${task.title}」をやることリストに追加しました。`);
+        saveState();
+        activeStatusTab = "active";
+        render();
+        showToast(`「${task.title}」をやることに追加しました。`);
+      }
     }
 
     function openParentSettings() {
@@ -2932,7 +3058,7 @@
     function renderParentRewardSettings() {
       const list = document.getElementById("parentTaskList");
       if (!state.tasks.length) {
-        list.innerHTML = `<div class="log-item">今日のお手伝いはまだありません。</div>`;
+        list.innerHTML = `<div class="log-item">登録済みのお手伝いはまだありません。</div>`;
         return;
       }
 
@@ -3032,7 +3158,6 @@
               <div class="task-meta">
                 <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
                 <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
-                <span class="status-badge ${task.status}">${getTaskStatusLabel(task.status)}</span>
                 <span class="status-badge idle">🎫 ${Number(task.ticketReward) || 1}枚</span>
               </div>
             </div>
@@ -3151,6 +3276,7 @@
         return;
       }
       state.tasks = state.tasks.filter(item => item.id !== parentDeleteTaskId);
+      state.todayTasks = state.todayTasks.filter(item => item.taskId !== parentDeleteTaskId);
       parentDeleteTaskId = null;
       saveState();
       render();
@@ -3173,7 +3299,7 @@
       const badges = [];
       if (done >= 1) badges.push("はじめの一歩");
       if (done >= 3) badges.push("チケット見習い");
-      if (done >= state.tasks.length && state.tasks.length > 0) badges.push("本日のスター");
+      if (done >= state.todayTasks.length && state.todayTasks.length > 0) badges.push("本日のスター");
       if (state.coins >= 10) badges.push("チケット名人");
       state.badges = Array.from(new Set([...state.badges, ...badges]));
       badgeRow.innerHTML = state.badges.map(badge => `<span class="badge">🏅 ${escapeHtml(badge)}</span>`).join("");
@@ -3346,9 +3472,11 @@
     }
 
     function startTask(taskId) {
-      const task = state.tasks.find(item => item.id === taskId);
-      if (!task || task.status !== "idle") return;
-      task.status = "inProgress";
+      const task = getTaskById(taskId);
+      const today = getTodayEntry(taskId);
+      if (!task || !today || today.status !== "idle") return;
+      today.status = "inProgress";
+      today.startedAt = todayString();
       addHistory(`「${task.title}」をはじめました。`);
       saveState();
       render();
@@ -3356,24 +3484,35 @@
     }
 
     function finishTask(taskId) {
-      const task = state.tasks.find(item => item.id === taskId);
-      if (!task || task.status !== "inProgress") return;
-      task.status = "done";
-      state.coins += task.ticketReward;
+      const task = getTaskById(taskId);
+      const today = getTodayEntry(taskId);
+      if (!task || !today || today.status !== "inProgress") return;
+      today.status = "done";
+      today.completedAt = todayString();
+      today.ticketReward = Math.min(5, Math.max(1, Number(task.ticketReward) || 1));
+      if (!today.ticketGranted) {
+        state.coins += today.ticketReward;
+        today.ticketGranted = true;
+      }
       upsertTaskHistory(task, { completed: true });
-      addHistory(`「${task.title}」を完了。チケット +${task.ticketReward}`);
+      addHistory(`「${task.title}」を完了。チケット +${today.ticketReward}`);
+      if (!hasOpenTodayTasks()) activeStatusTab = "completed";
       saveState();
       render();
       burstConfetti();
-      showToast(`やったね！チケット${task.ticketReward}枚ゲット！`);
+      showToast(`やったね！チケット${today.ticketReward}枚ゲット！`);
     }
 
     function resetDay() {
+      const ok = window.confirm("今日のやることリストをリセットしますか？お手伝いリストは消えません。");
+      if (!ok) return;
+      state.todayTasks = [];
       state.tasks = state.tasks.map(task => ({ ...task, status: "idle" }));
-      addHistory("今日のお手伝い状態をリセットしました。");
+      activeStatusTab = "library";
+      addHistory("今日のやることリストをリセットしました。");
       saveState();
       render();
-      showToast("今日のお手伝いをリセットしました。");
+      showToast("今日のやることリストをリセットしました。");
     }
 
     function spinWheel() {
