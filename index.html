@@ -2607,7 +2607,7 @@
     if (needsStateSave) saveState();
     let activeCategory = "snack";
     let activeTaskCategory = "all";
-    let activeStatusTab = hasOpenTodayTasks() ? "active" : "library";
+    let activeStatusTab = "active";
     let bulkTaskCategory = "all";
     let bulkSelectedTaskIds = new Set();
     let activeBet = 1;
@@ -3067,7 +3067,14 @@
       if (!todayItems.length) {
         list.innerHTML = activeStatusTab === "completed"
           ? `<div class="log-item">まだ終わったお手伝いはないよ。お手伝いが終わったらここに出るよ。</div>`
-          : `<div class="log-item">今日はまだ選んでいないよ。お手伝いリストから、やりたいお手伝いを選んでね。</div>`;
+          : `
+            <div class="log-item">
+              今日やるお手伝いを選ぼう！
+              <button class="primary" type="button" id="emptyTaskPickerBtn">お手伝いを選ぶ</button>
+            </div>
+          `;
+        const emptyPicker = document.getElementById("emptyTaskPickerBtn");
+        if (emptyPicker) emptyPicker.addEventListener("click", openBulkTaskPicker);
         return;
       }
 
@@ -3120,9 +3127,9 @@
       const activeCount = getTodayTaskItems("active").length;
       const completedCount = getTodayTaskItems("completed").length;
       const statusTabs = [
-        { id: "library", label: "📋 お手伝いリスト", count: libraryCount },
         { id: "active", label: "🌟 やること", count: activeCount },
-        { id: "completed", label: "✅ おわった", count: completedCount }
+        { id: "completed", label: "✅ おわった", count: completedCount },
+        { id: "library", label: "📋 お手伝いリスト", count: libraryCount }
       ];
 
       tabs.innerHTML = statusTabs.map(tab => `
@@ -4004,7 +4011,7 @@
       const ok = window.confirm("このお手伝いを今日のやることから外しますか？");
       if (!ok) return;
       state.todayTasks = state.todayTasks.filter(item => item.taskId !== taskId);
-      if (!hasOpenTodayTasks()) activeStatusTab = "library";
+      if (!hasOpenTodayTasks()) activeStatusTab = "active";
       addHistory(`「${task.title}」を今日のやることから外しました。`);
       saveState();
       render();
@@ -4016,7 +4023,7 @@
       if (!ok) return;
       state.todayTasks = [];
       state.tasks = state.tasks.map(task => ({ ...task, status: "idle" }));
-      activeStatusTab = "library";
+      activeStatusTab = "active";
       addHistory("今日のやることリストをリセットしました。");
       saveState();
       render();
