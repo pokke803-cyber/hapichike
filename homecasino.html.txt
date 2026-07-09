@@ -988,6 +988,46 @@
       font-size: 1.05rem;
     }
 
+    .transfer-balance-row,
+    .transfer-history-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .transfer-balance-row {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-bottom: 10px;
+    }
+
+    .transfer-balance-card,
+    .transfer-history-item {
+      border: 3px solid #fff;
+      border-radius: 18px;
+      padding: 10px;
+      background: rgba(255, 255, 255, .88);
+      box-shadow: 0 6px 0 rgba(39, 48, 67, .1);
+      color: #23324d;
+      font-weight: 900;
+    }
+
+    .transfer-balance-card strong {
+      display: block;
+      color: #ef233c;
+      font-size: 1.35rem;
+      line-height: 1.1;
+    }
+
+    .transfer-history-title {
+      margin: 12px 0 6px;
+      font-weight: 900;
+      color: #273043;
+    }
+
+    .transfer-history-item small {
+      display: block;
+      color: #64748b;
+    }
+
     .parent-edit-tools {
       display: flex;
       flex-wrap: wrap;
@@ -1908,6 +1948,7 @@
       .status-bar { grid-template-columns: 1fr; }
       .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .task-status-tabs { grid-template-columns: 1fr; }
+      .transfer-balance-row { grid-template-columns: 1fr; }
       .category-tabs, .point-row { grid-template-columns: 1fr; }
       .roulette-dashboard { grid-template-columns: 1fr; }
       .casino-table { grid-template-columns: 1fr; }
@@ -2185,6 +2226,10 @@
             <strong>チケット枚数設定</strong>
             TICKET枚数だけをまとめて変更できます。
           </button>
+          <button class="parent-menu-button" type="button" id="openParentPayTransferBtn">
+            <strong>PAYポイント振り替え</strong>
+            SweetsPAY・ToyPAY・GamePAYのポイントを移動できます。
+          </button>
         </div>
         <div class="parent-save-row">
           <button class="secondary" type="button" id="parentMenuBackBtn">もどる</button>
@@ -2198,6 +2243,29 @@
           <button class="secondary" type="button" id="parentRewardBackBtn">もどる</button>
           <button class="primary" type="button" id="saveParentRewardsBtn">保存</button>
         </div>
+      </div>
+      <div class="info-modal-body edit-form parent-panel hidden" id="parentPayTransferPanel">
+        <p class="parent-note">PAYポイントを別のPAYへ振り替えます。合計ポイントは変わりません。</p>
+        <div class="transfer-balance-row" id="transferBalanceRow"></div>
+        <label>
+          振り替え元PAY
+          <select id="transferFromPay"></select>
+        </label>
+        <label>
+          振り替え先PAY
+          <select id="transferToPay"></select>
+        </label>
+        <label>
+          振り替えるポイント
+          <input id="transferAmountInput" inputmode="numeric" pattern="[0-9]*" min="1" type="number" placeholder="例：3">
+        </label>
+        <div class="edit-error" id="transferMessage" role="status"></div>
+        <div class="edit-actions">
+          <button class="secondary" type="button" id="parentPayTransferBackBtn">もどる</button>
+          <button class="primary" type="button" id="confirmPayTransferBtn">確認して実行</button>
+        </div>
+        <div class="transfer-history-title">振り替え履歴</div>
+        <div class="transfer-history-list" id="transferHistoryList"></div>
       </div>
       <div class="info-modal-body parent-panel hidden" id="parentTaskEditPanel">
         <div class="parent-edit-tools">
@@ -2405,6 +2473,7 @@
     function normalizeState(saved) {
       const tasks = Array.isArray(saved.tasks) ? normalizeTasks(saved.tasks) : defaultTasks.map(task => ({ ...task }));
       const todayTasks = normalizeTodayTasks(saved.todayTasks, tasks);
+      if (!Array.isArray(saved.transferHistory)) needsStateSave = true;
       return {
         childName: sanitizeName(saved.childName || ""),
         coins: Number(saved.coins) || 0,
@@ -2412,6 +2481,7 @@
         todayTasks,
         history: Array.isArray(saved.history) ? saved.history : [],
         payLogs: Array.isArray(saved.payLogs) ? saved.payLogs : [],
+        transferHistory: Array.isArray(saved.transferHistory) ? saved.transferHistory : [],
         taskHistory: normalizeTaskHistory(saved.taskHistory, tasks),
         parentPassword: String(saved.parentPassword || "1234"),
         badges: Array.isArray(saved.badges) ? saved.badges : [],
@@ -3024,6 +3094,8 @@
       document.getElementById("parentPasswordInput").value = "";
       document.getElementById("parentPasswordError").textContent = "";
       document.getElementById("parentRewardMessage").textContent = "";
+      document.getElementById("transferMessage").textContent = "";
+      document.getElementById("transferAmountInput").value = "";
       showParentPanel("parentPasswordPanel");
       document.getElementById("parentSettingsModal").classList.remove("hidden");
       setTimeout(() => document.getElementById("parentPasswordInput").focus(), 0);
@@ -3033,13 +3105,14 @@
       document.getElementById("parentSettingsModal").classList.add("hidden");
       document.getElementById("parentPasswordError").textContent = "";
       document.getElementById("parentRewardMessage").textContent = "";
+      document.getElementById("transferMessage").textContent = "";
       parentRewardDraft = {};
       parentEditingTaskId = null;
       parentDeleteTaskId = null;
     }
 
     function showParentPanel(panelId) {
-      ["parentPasswordPanel", "parentMenuPanel", "parentRewardPanel", "parentTaskEditPanel", "parentTaskFormPanel", "parentDeletePanel"].forEach(id => {
+      ["parentPasswordPanel", "parentMenuPanel", "parentRewardPanel", "parentPayTransferPanel", "parentTaskEditPanel", "parentTaskFormPanel", "parentDeletePanel"].forEach(id => {
         document.getElementById(id).classList.toggle("hidden", id !== panelId);
       });
     }
@@ -3145,6 +3218,103 @@
       document.getElementById("parentRewardMessage").textContent = "";
       showParentPanel("parentRewardPanel");
       renderParentRewardSettings();
+    }
+
+    function openParentPayTransfer() {
+      document.getElementById("transferMessage").textContent = "";
+      document.getElementById("transferAmountInput").value = "";
+      showParentPanel("parentPayTransferPanel");
+      renderPayTransferPanel();
+    }
+
+    function renderPayTransferPanel() {
+      const balanceRow = document.getElementById("transferBalanceRow");
+      balanceRow.innerHTML = payTypes.map(pay => `
+        <div class="transfer-balance-card">
+          ${pay.label}
+          <strong>${Number(state.points[pay.category]) || 0}P</strong>
+        </div>
+      `).join("");
+
+      const fromSelect = document.getElementById("transferFromPay");
+      const toSelect = document.getElementById("transferToPay");
+      const currentFrom = fromSelect.value || payTypes[0].id;
+      const currentTo = toSelect.value || payTypes[1].id;
+      const options = payTypes.map(pay => `<option value="${pay.id}">${pay.label}（${Number(state.points[pay.category]) || 0}P）</option>`).join("");
+      fromSelect.innerHTML = options;
+      toSelect.innerHTML = options;
+      fromSelect.value = payTypes.some(pay => pay.id === currentFrom) ? currentFrom : payTypes[0].id;
+      toSelect.value = payTypes.some(pay => pay.id === currentTo) ? currentTo : payTypes[1].id;
+      renderTransferHistory();
+    }
+
+    function renderTransferHistory() {
+      const list = document.getElementById("transferHistoryList");
+      const history = Array.isArray(state.transferHistory) ? state.transferHistory : [];
+      if (!history.length) {
+        list.innerHTML = `<div class="log-item">振り替え履歴はまだありません。</div>`;
+        return;
+      }
+      list.innerHTML = history.slice(0, 10).map(item => `
+        <div class="transfer-history-item">
+          <small>${escapeHtml(item.date || "")}</small>
+          ${escapeHtml(item.fromLabel)} から ${escapeHtml(item.toLabel)} に ${Number(item.amount) || 0}P
+        </div>
+      `).join("");
+    }
+
+    function executePayTransfer() {
+      const fromId = document.getElementById("transferFromPay").value;
+      const toId = document.getElementById("transferToPay").value;
+      const amountValue = document.getElementById("transferAmountInput").value;
+      const message = document.getElementById("transferMessage");
+      const fromPay = payTypes.find(pay => pay.id === fromId);
+      const toPay = payTypes.find(pay => pay.id === toId);
+      const amount = Number(amountValue);
+
+      message.className = "edit-error";
+      if (!fromPay || !toPay) {
+        message.textContent = "PAYを選んでください";
+        return;
+      }
+      if (fromPay.id === toPay.id) {
+        message.textContent = "振り替え元と振り替え先は別のPAYを選んでください";
+        return;
+      }
+      if (!Number.isInteger(amount) || amount < 1) {
+        message.textContent = "1以上の整数を入れてください";
+        return;
+      }
+
+      const fromPoints = Number(state.points[fromPay.category]) || 0;
+      if (amount > fromPoints) {
+        message.textContent = "振り替え元のポイントがたりないよ";
+        return;
+      }
+
+      const ok = window.confirm(`${fromPay.label} から ${toPay.label} へ ${amount}P 振り替えます。よろしいですか？`);
+      if (!ok) return;
+
+      state.points[fromPay.category] = fromPoints - amount;
+      state.points[toPay.category] = (Number(state.points[toPay.category]) || 0) + amount;
+      state.transferHistory.unshift({
+        id: `transfer-${Date.now()}`,
+        date: todayString(),
+        fromId: fromPay.id,
+        fromLabel: fromPay.label,
+        toId: toPay.id,
+        toLabel: toPay.label,
+        amount
+      });
+      state.transferHistory = state.transferHistory.slice(0, 50);
+      addHistory(`${fromPay.label} から ${toPay.label} に ${amount}P 振り替えました。`);
+      saveState();
+      document.getElementById("transferAmountInput").value = "";
+      message.textContent = `${fromPay.label} から ${toPay.label} に ${amount}P 振り替えました`;
+      message.className = "edit-error pay-message success";
+      render();
+      renderPayTransferPanel();
+      showToast("PAYポイントを振り替えました。");
     }
 
     function openParentTaskEditPage() {
@@ -3770,7 +3940,10 @@
     document.getElementById("parentMenuBackBtn").addEventListener("click", closeParentSettings);
     document.getElementById("openParentTaskEditBtn").addEventListener("click", openParentTaskEditPage);
     document.getElementById("openParentRewardOnlyBtn").addEventListener("click", openParentRewardSettings);
+    document.getElementById("openParentPayTransferBtn").addEventListener("click", openParentPayTransfer);
     document.getElementById("parentRewardBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("parentPayTransferBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("confirmPayTransferBtn").addEventListener("click", executePayTransfer);
     document.getElementById("parentTaskEditBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("addParentTaskBtn").addEventListener("click", () => openParentTaskForm());
     document.getElementById("parentTaskFormPanel").addEventListener("submit", saveParentTaskForm);
