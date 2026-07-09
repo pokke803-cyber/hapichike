@@ -2516,37 +2516,37 @@
 
     const betTables = {
       1: [
-        { points: 1, weight: 4, tone: "plus" },
-        { points: 2, weight: 2, tone: "plus" },
+        { points: 1, weight: 5, tone: "plus" },
+        { points: 2, weight: 3, tone: "plus" },
         { points: 0, weight: 2, tone: "safe" },
         { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ],
       2: [
-        { points: 2, weight: 4, tone: "plus" },
-        { points: 4, weight: 2, tone: "plus" },
+        { points: 2, weight: 5, tone: "plus" },
+        { points: 4, weight: 3, tone: "plus" },
         { points: 0, weight: 2, tone: "safe" },
         { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ],
       3: [
         { points: 3, weight: 4, tone: "plus" },
         { points: 5, weight: 3, tone: "plus" },
-        { points: 8, weight: 1, tone: "rare" },
-        { points: 0, weight: 2, tone: "safe" },
+        { points: 8, weight: 2, tone: "rare" },
+        { points: 0, weight: 1, tone: "safe" },
         { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ],
       4: [
         { points: 4, weight: 4, tone: "plus" },
         { points: 8, weight: 3, tone: "plus" },
-        { points: 12, weight: 1, tone: "rare" },
-        { points: 0, weight: 2, tone: "safe" },
+        { points: 12, weight: 2, tone: "rare" },
+        { points: 0, weight: 1, tone: "safe" },
         { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ],
       5: [
         { points: 5, weight: 4, tone: "plus" },
         { points: 10, weight: 3, tone: "plus" },
-        { points: 15, weight: 1, tone: "rare" },
+        { points: 15, weight: 2, tone: "rare" },
         { points: 20, weight: 1, tone: "rare" },
-        { points: 0, weight: 2, tone: "safe" },
+        { points: 0, weight: 1, tone: "safe" },
         { points: 0, weight: 2, tone: "chance", type: "happyChance" }
       ]
     };
