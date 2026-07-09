@@ -768,6 +768,70 @@
       transform: none;
     }
 
+    .bulk-select-summary {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 3px solid #fff;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #fff8d6, #dff7ff);
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .1);
+      font-weight: 900;
+    }
+
+    .bulk-task-list {
+      display: grid;
+      gap: 10px;
+      max-height: min(52vh, 480px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .bulk-task-card {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      padding: 12px;
+      border: 3px solid #fff;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, .9);
+      box-shadow: 0 6px 0 rgba(39, 48, 67, .1);
+      cursor: pointer;
+    }
+
+    .bulk-task-card.selected {
+      outline: 3px solid #ff8fab;
+      background: linear-gradient(135deg, #fff, #ffe4f3);
+    }
+
+    .bulk-task-card.added {
+      opacity: .62;
+      cursor: not-allowed;
+    }
+
+    .bulk-task-check {
+      width: 30px;
+      height: 30px;
+      accent-color: #ff8fab;
+      cursor: pointer;
+    }
+
+    .bulk-task-main {
+      min-width: 0;
+    }
+
+    .bulk-task-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 900;
+      color: #23324d;
+      overflow-wrap: anywhere;
+    }
+
     .task-tools {
       display: flex;
       flex-wrap: wrap;
@@ -2166,6 +2230,7 @@
       <section class="panel active" id="tasks">
         <h2 class="panel-title"><span>🎟️</span><span id="taskSectionTitle">お手伝い</span></h2>
         <div class="task-tools">
+          <button class="primary" id="openBulkTaskPickerBtn">お手伝いを選ぶ</button>
           <button class="secondary history-search-button" id="openTaskHistoryBtn">りれきから検索する🔍</button>
           <button class="secondary" id="resetDayBtn">今日の状態をリセット</button>
         </div>
@@ -2265,6 +2330,26 @@
           <input id="taskHistorySearchInput" autocomplete="off" placeholder="例：食器、そうじ、せんたく">
         </label>
         <div class="history-result-list" id="taskHistoryResults"></div>
+      </div>
+    </section>
+  </div>
+  <div class="modal-backdrop hidden" id="bulkTaskPickerModal" role="dialog" aria-modal="true" aria-labelledby="bulkTaskPickerTitle">
+    <section class="info-modal">
+      <header>
+        <h3 id="bulkTaskPickerTitle">今日やるお手伝いを選ぼう</h3>
+        <button class="modal-close" id="bulkTaskPickerClose" aria-label="閉じる">×</button>
+      </header>
+      <div class="info-modal-body search-form">
+        <div class="bulk-select-summary">
+          <span id="bulkSelectedCount">0こ選んでいます</span>
+          <span>チェックしてまとめて追加</span>
+        </div>
+        <div class="task-filter" id="bulkTaskCategoryFilter" aria-label="一括追加カテゴリー"></div>
+        <div class="bulk-task-list" id="bulkTaskList"></div>
+        <div class="edit-actions">
+          <button class="secondary" type="button" id="bulkTaskPickerCancel">キャンセル</button>
+          <button class="primary" type="button" id="bulkAddTasksBtn">選んだお手伝いを追加</button>
+        </div>
       </div>
     </section>
   </div>
@@ -2523,6 +2608,8 @@
     let activeCategory = "snack";
     let activeTaskCategory = "all";
     let activeStatusTab = hasOpenTodayTasks() ? "active" : "library";
+    let bulkTaskCategory = "all";
+    let bulkSelectedTaskIds = new Set();
     let activeBet = 1;
     let rotation = 0;
     let spinning = false;
@@ -3186,6 +3273,113 @@
         render();
         showToast(`「${task.title}」をやることに追加しました。`);
       }
+    }
+
+    function openBulkTaskPicker() {
+      bulkTaskCategory = activeTaskCategory;
+      bulkSelectedTaskIds = new Set();
+      document.getElementById("bulkTaskPickerModal").classList.remove("hidden");
+      renderBulkTaskPicker();
+    }
+
+    function closeBulkTaskPicker() {
+      document.getElementById("bulkTaskPickerModal").classList.add("hidden");
+      bulkSelectedTaskIds = new Set();
+    }
+
+    function getBulkCategoryFilteredTasks() {
+      return bulkTaskCategory === "all"
+        ? state.tasks
+        : state.tasks.filter(task => task.category === bulkTaskCategory);
+    }
+
+    function renderBulkTaskPicker() {
+      renderBulkTaskCategoryFilter();
+      renderBulkTaskList();
+      document.getElementById("bulkSelectedCount").textContent = `${bulkSelectedTaskIds.size}こ選んでいます`;
+      document.getElementById("bulkAddTasksBtn").disabled = bulkSelectedTaskIds.size === 0;
+    }
+
+    function renderBulkTaskCategoryFilter() {
+      const filter = document.getElementById("bulkTaskCategoryFilter");
+      filter.innerHTML = taskCategories.map(category => {
+        const count = category.id === "all"
+          ? state.tasks.length
+          : state.tasks.filter(task => task.category === category.id).length;
+        return `<button class="task-filter-button ${bulkTaskCategory === category.id ? "active" : ""}" data-bulk-category="${category.id}">${category.icon} ${category.label} ${count}</button>`;
+      }).join("");
+
+      filter.querySelectorAll("[data-bulk-category]").forEach(button => {
+        button.addEventListener("click", () => {
+          bulkTaskCategory = button.dataset.bulkCategory;
+          renderBulkTaskPicker();
+        });
+      });
+    }
+
+    function renderBulkTaskList() {
+      const list = document.getElementById("bulkTaskList");
+      const tasks = getBulkCategoryFilteredTasks();
+      if (!tasks.length) {
+        list.innerHTML = `<div class="log-item">このカテゴリーのお手伝い候補はまだないよ。</div>`;
+        return;
+      }
+
+      list.innerHTML = tasks.map(task => {
+        const added = isTaskInTodayList(task.id);
+        const selected = bulkSelectedTaskIds.has(task.id);
+        return `
+          <label class="bulk-task-card ${selected ? "selected" : ""} ${added ? "added" : ""}">
+            <input class="bulk-task-check" type="checkbox" data-bulk-task="${escapeHtml(task.id)}" ${selected ? "checked" : ""} ${added ? "disabled" : ""}>
+            <div class="bulk-task-main">
+              <div class="bulk-task-title">${escapeHtml(task.icon)} ${escapeHtml(task.title)}</div>
+              <div class="task-meta">
+                <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
+                <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
+                <span class="status-badge idle">🎫 ${Number(task.ticketReward) || 1}枚</span>
+                ${added ? `<span class="status-badge done">追加済み</span>` : ""}
+              </div>
+            </div>
+          </label>
+        `;
+      }).join("");
+
+      list.querySelectorAll("[data-bulk-task]").forEach(input => {
+        input.addEventListener("change", () => {
+          const taskId = input.dataset.bulkTask;
+          if (input.checked) {
+            bulkSelectedTaskIds.add(taskId);
+          } else {
+            bulkSelectedTaskIds.delete(taskId);
+          }
+          renderBulkTaskPicker();
+        });
+      });
+    }
+
+    function addSelectedTasksToToday() {
+      const selectedIds = Array.from(bulkSelectedTaskIds);
+      let addedCount = 0;
+      selectedIds.forEach(taskId => {
+        if (isTaskInTodayList(taskId)) return;
+        const beforeCount = state.todayTasks.length;
+        addTaskToToday(taskId, { silent: true });
+        if (state.todayTasks.length > beforeCount) addedCount += 1;
+      });
+
+      if (!addedCount) {
+        showToast("追加できるお手伝いがありません。");
+        renderBulkTaskPicker();
+        return;
+      }
+
+      addHistory(`${addedCount}このお手伝いを今日のやることに追加しました。`);
+      saveState();
+      bulkSelectedTaskIds = new Set();
+      activeStatusTab = "active";
+      closeBulkTaskPicker();
+      render();
+      showToast(`${addedCount}つのお手伝いを追加しました！`);
     }
 
     function openParentSettings() {
@@ -4071,6 +4265,13 @@
       if (event.target.id === "infoModal") closeInfoModal();
     });
     document.getElementById("openTaskHistoryBtn").addEventListener("click", openTaskHistorySearch);
+    document.getElementById("openBulkTaskPickerBtn").addEventListener("click", openBulkTaskPicker);
+    document.getElementById("bulkTaskPickerClose").addEventListener("click", closeBulkTaskPicker);
+    document.getElementById("bulkTaskPickerCancel").addEventListener("click", closeBulkTaskPicker);
+    document.getElementById("bulkAddTasksBtn").addEventListener("click", addSelectedTasksToToday);
+    document.getElementById("bulkTaskPickerModal").addEventListener("click", event => {
+      if (event.target.id === "bulkTaskPickerModal") closeBulkTaskPicker();
+    });
     document.getElementById("taskHistoryClose").addEventListener("click", closeTaskHistorySearch);
     document.getElementById("taskHistorySearchInput").addEventListener("input", renderTaskHistorySearch);
     document.getElementById("taskHistoryModal").addEventListener("click", event => {
