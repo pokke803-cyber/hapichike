@@ -707,7 +707,6 @@
     }
 
     .status-badge.idle { color: #64748b; }
-    .status-badge.inProgress { color: #0284c7; background: #dff7ff; }
     .status-badge.done { color: #118a5f; background: #e9f9ef; }
 
     .ticket-reward {
@@ -750,7 +749,16 @@
     }
 
     .task-action.start { background: linear-gradient(135deg, #ffd166, #fff8d6); }
-    .task-action.finish { background: linear-gradient(135deg, #22c55e, #e9f9ef); color: #064e3b; }
+    .task-action.finish,
+    .task-action.complete {
+      background: linear-gradient(135deg, #22c55e, #ffd166);
+      color: #064e3b;
+      box-shadow: 0 6px 0 rgba(17, 138, 95, .24);
+    }
+    .task-action.cancel {
+      background: linear-gradient(135deg, #fff, #f8fafc);
+      color: #64748b;
+    }
     .task-action.edit { background: linear-gradient(135deg, #fff, #dff7ff); }
 
     .task-action:disabled {
@@ -2332,7 +2340,7 @@
       </div>
       <div class="info-modal-body parent-panel hidden" id="parentTaskEditPanel">
         <div class="parent-edit-tools">
-          <p class="parent-note">登録済みのお手伝いを追加・編集・削除できます。作業中・完了の状態は編集しても保持します。</p>
+          <p class="parent-note">登録済みのお手伝いを追加・編集・削除できます。今日のやることリストとは分けて管理します。</p>
           <button class="primary" type="button" id="addParentTaskBtn">あたらしく追加</button>
         </div>
         <div class="parent-task-list" id="parentEditTaskList"></div>
@@ -2992,7 +3000,7 @@
 
       todayItems.forEach(({ task, today }) => {
         const card = document.createElement("article");
-        card.className = `task-card ${today.status === "inProgress" ? "in-progress" : ""}`;
+        card.className = "task-card";
         card.innerHTML = `
           <div class="task-top">
             <div class="task-art">${escapeHtml(task.icon)}</div>
@@ -3001,7 +3009,6 @@
               <div class="task-meta">
                 <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
                 <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
-                <span class="status-badge ${today.status}">${getTaskStatusLabel(today.status)}</span>
               </div>
             </div>
           </div>
@@ -3010,12 +3017,12 @@
             <span>チケット ${task.ticketReward}枚</span>
           </div>
           <div class="task-actions">
-            <button class="task-action start" data-action="start" ${today.status !== "idle" ? "disabled" : ""}>はじめる</button>
-            <button class="task-action finish" data-action="finish" ${today.status !== "inProgress" ? "disabled" : ""}>おわる</button>
+            <button class="task-action complete" data-action="complete">お手伝い完了！</button>
+            <button class="task-action cancel" data-action="cancel">キャンセル</button>
           </div>
         `;
-        card.querySelector('[data-action="start"]').addEventListener("click", () => startTask(task.id));
-        card.querySelector('[data-action="finish"]').addEventListener("click", () => finishTask(task.id));
+        card.querySelector('[data-action="complete"]').addEventListener("click", () => completeTask(task.id));
+        card.querySelector('[data-action="cancel"]').addEventListener("click", () => cancelTodayTask(task.id));
         list.appendChild(card);
       });
     }
@@ -3776,22 +3783,10 @@
       return { segment: segments[segments.length - 1], startWeight: totalWeight - segments[segments.length - 1].weight, totalWeight };
     }
 
-    function startTask(taskId) {
+    function completeTask(taskId) {
       const task = getTaskById(taskId);
       const today = getTodayEntry(taskId);
-      if (!task || !today || today.status !== "idle") return;
-      today.status = "inProgress";
-      today.startedAt = todayString();
-      addHistory(`「${task.title}」をはじめました。`);
-      saveState();
-      render();
-      showToast("作業中になりました。終わったら「おわる」を押してね。");
-    }
-
-    function finishTask(taskId) {
-      const task = getTaskById(taskId);
-      const today = getTodayEntry(taskId);
-      if (!task || !today || today.status !== "inProgress") return;
+      if (!task || !today || isTaskCompleted(today)) return;
       today.status = "done";
       today.completedAt = todayString();
       today.ticketReward = Math.min(5, Math.max(1, Number(task.ticketReward) || 1));
@@ -3806,6 +3801,20 @@
       render();
       burstConfetti();
       showToast(`やったね！チケット${today.ticketReward}枚ゲット！`);
+    }
+
+    function cancelTodayTask(taskId) {
+      const task = getTaskById(taskId);
+      const today = getTodayEntry(taskId);
+      if (!task || !today || isTaskCompleted(today)) return;
+      const ok = window.confirm("このお手伝いを今日のやることから外しますか？");
+      if (!ok) return;
+      state.todayTasks = state.todayTasks.filter(item => item.taskId !== taskId);
+      if (!hasOpenTodayTasks()) activeStatusTab = "library";
+      addHistory(`「${task.title}」を今日のやることから外しました。`);
+      saveState();
+      render();
+      showToast("今日のやることから外しました。");
     }
 
     function resetDay() {
