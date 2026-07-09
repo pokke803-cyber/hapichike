@@ -1287,6 +1287,60 @@
       color: #273043;
     }
 
+    .happy-chance-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 14px;
+      padding: 12px;
+      border: 3px solid #fff;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #fff, #ffe4f3 52%, #fff8d6);
+      box-shadow: 0 8px 0 rgba(255, 143, 171, .22), 0 12px 22px rgba(39, 48, 67, .1);
+      outline: 2px solid rgba(255, 143, 171, .5);
+    }
+
+    .happy-chance-panel.active {
+      background: linear-gradient(135deg, #ff8fab, #ffd166);
+      color: #fff;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .28);
+    }
+
+    .happy-chance-copy {
+      font-weight: 900;
+      line-height: 1.45;
+    }
+
+    .happy-chance-copy span {
+      display: block;
+      color: #7c3aed;
+      font-size: .86rem;
+    }
+
+    .happy-chance-panel.active .happy-chance-copy span {
+      color: #fff;
+    }
+
+    .happy-chance-reserve-button {
+      min-height: 46px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      padding: 0 16px;
+      background: linear-gradient(135deg, #ff8fab, #8b5cf6);
+      color: #fff;
+      font-weight: 900;
+      cursor: pointer;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .32);
+      box-shadow: inset 0 2px 0 rgba(255,255,255,.72), 0 6px 0 rgba(124, 58, 237, .2);
+    }
+
+    .happy-chance-reserve-button:disabled {
+      cursor: not-allowed;
+      opacity: .58;
+      box-shadow: none;
+    }
+
     .bet-buttons {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
@@ -1949,6 +2003,8 @@
       .tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .task-status-tabs { grid-template-columns: 1fr; }
       .transfer-balance-row { grid-template-columns: 1fr; }
+      .happy-chance-panel { grid-template-columns: 1fr; }
+      .happy-chance-reserve-button { width: 100%; }
       .category-tabs, .point-row { grid-template-columns: 1fr; }
       .roulette-dashboard { grid-template-columns: 1fr; }
       .casino-table { grid-template-columns: 1fr; }
@@ -2123,6 +2179,13 @@
           <div class="roulette-stat">🎯 選択中<span id="activeCategoryDisplay">お菓子</span></div>
           <div class="roulette-stat">🔥 BET<span id="activeBetDisplay">1</span></div>
           <div class="roulette-stat">💖 ハピチャンカード<span id="happyChanceDisplay">0枚</span></div>
+        </div>
+        <div class="happy-chance-panel" id="happyChancePanel">
+          <div class="happy-chance-copy">
+            <strong id="happyChanceReserveTitle">💖 ハピチャンカード：0枚</strong>
+            <span id="happyChanceReserveStatus">カードを持っていると、次のルーレットを+1Pできるよ</span>
+          </div>
+          <button class="happy-chance-reserve-button" id="reserveHappyChanceBtn" type="button">カードで +1P</button>
         </div>
         <div class="point-row" id="pointRow"></div>
         <div class="casino-table">
@@ -2456,6 +2519,7 @@
     let rotation = 0;
     let spinning = false;
     let latestRouletteResult = null;
+    let happyChanceReserved = false;
     let parentRewardDraft = {};
     let parentEditingTaskId = null;
     let parentDeleteTaskId = null;
@@ -2736,11 +2800,42 @@
       document.getElementById("activeCategoryDisplay").textContent = categories[activeCategory].label;
       document.getElementById("activeBetDisplay").textContent = activeBet;
       document.getElementById("happyChanceDisplay").textContent = `${state.happyChanceCards}枚`;
+      renderHappyChanceReserve();
       document.getElementById("spinBtn").disabled = state.coins < activeBet || spinning;
       document.getElementById("doneCount").textContent = done;
       document.getElementById("taskTotal").textContent = state.todayTasks.length;
       document.getElementById("levelText").textContent = Math.max(1, Math.floor((state.history.length + state.coins) / 6) + 1);
       renderBadges(done);
+    }
+
+    function renderHappyChanceReserve() {
+      const panel = document.getElementById("happyChancePanel");
+      const title = document.getElementById("happyChanceReserveTitle");
+      const status = document.getElementById("happyChanceReserveStatus");
+      const button = document.getElementById("reserveHappyChanceBtn");
+      if (!panel || !title || !status || !button) return;
+
+      title.textContent = `💖 ハピチャンカード：${state.happyChanceCards}枚`;
+      panel.classList.toggle("active", happyChanceReserved);
+
+      if (happyChanceReserved) {
+        title.textContent = `💖 ハピチャンカード：${state.happyChanceCards}枚（1枚予約中）`;
+        status.textContent = "次のルーレットで +1P予約中！";
+        button.textContent = "次は +1P！";
+        button.disabled = true;
+        return;
+      }
+
+      if (state.happyChanceCards <= 0) {
+        status.textContent = "カードがないよ。ハピチャンマスでゲットしよう！";
+        button.textContent = "カードがないよ";
+        button.disabled = true;
+        return;
+      }
+
+      status.textContent = "使うと次のルーレット結果に +1P！";
+      button.textContent = "カードで +1P";
+      button.disabled = spinning;
     }
 
     function renderAccount() {
@@ -3586,9 +3681,18 @@
       return "result-miss";
     }
 
-    function getResultMessage(category, segment, before, after) {
-      if (segment.type === "happyChance") return `ハピチャンス！ハピチャンカードを1枚ゲット！次回+1Pできるよ！`;
-      if (segment.points > 0) return `やったね！ ${category.pointName} ${formatPoints(segment.points)}！ ${before} → ${after}`;
+    function getResultMessage(category, segment, before, after, bonusPoints = 0) {
+      if (segment.type === "happyChance") {
+        return bonusPoints > 0
+          ? `ハピチャンス！カードを1枚ゲット、さらにカードで +1P！ ${before} → ${after}`
+          : `ハピチャンス！ハピチャンカードを1枚ゲット！次回+1Pできるよ！`;
+      }
+      if (segment.points > 0) {
+        return bonusPoints > 0
+          ? `やったね！ ${category.pointName} ${formatPoints(segment.points)}、カードでさらに +1P！ ${before} → ${after}`
+          : `やったね！ ${category.pointName} ${formatPoints(segment.points)}！ ${before} → ${after}`;
+      }
+      if (bonusPoints > 0) return `0Pだったけど、カードで +1P！ ${before} → ${after}`;
       return `ポイントはそのまま！チケットが1まい戻ってきたよ。次はチャンス！ ${before} → ${after}`;
     }
 
@@ -3644,8 +3748,18 @@
     }
 
     function createHappyChanceButtonHtml() {
-      if (!latestRouletteResult || latestRouletteResult.used || !latestRouletteResult.canUseCard || state.happyChanceCards <= 0) return "";
-      return `<button class="happy-card-action" id="useHappyChanceBtn" type="button">💖 ハピチャンカードを使う（+1P）</button>`;
+      return "";
+    }
+
+    function reserveHappyChanceCard() {
+      if (spinning || happyChanceReserved || state.happyChanceCards <= 0) return;
+      happyChanceReserved = true;
+      latestRouletteResult = null;
+      renderHappyChanceReserve();
+      const resultBox = document.getElementById("luckyText");
+      resultBox.className = "result-good";
+      resultBox.textContent = "💖 ハピチャンカード予約中！次のルーレットは +1P！";
+      showToast("ハピチャンカードを予約したよ！次は+1P！");
     }
 
     function weightedPick(segments) {
@@ -3714,7 +3828,11 @@
       }
       spinning = true;
       latestRouletteResult = null;
-      const cardsBeforeSpin = state.happyChanceCards;
+      const useHappyChanceBonus = happyChanceReserved && state.happyChanceCards > 0;
+      if (useHappyChanceBonus) {
+        state.happyChanceCards -= 1;
+        happyChanceReserved = false;
+      }
       state.coins -= activeBet;
       updateStats();
       const segments = getCurrentSegments();
@@ -3729,7 +3847,10 @@
       setTimeout(() => {
         const category = categories[activeCategory];
         const before = state.points[activeCategory];
-        const after = picked.segment.type === "happyChance" ? before : before + picked.segment.points;
+        const basePoints = picked.segment.type === "happyChance" ? 0 : picked.segment.points;
+        const bonusPoints = useHappyChanceBonus ? 1 : 0;
+        const totalPoints = basePoints + bonusPoints;
+        const after = before + totalPoints;
         const actualChange = after - before;
         state.points[activeCategory] = after;
         const ticketBonus = picked.segment.points === 0 && picked.segment.type !== "happyChance" ? 1 : 0;
@@ -3738,22 +3859,30 @@
         latestRouletteResult = {
           category: activeCategory,
           used: false,
-          canUseCard: picked.segment.type !== "happyChance" && cardsBeforeSpin > 0
+          canUseCard: false
         };
         const resultBox = document.getElementById("luckyText");
-        resultBox.className = getResultClass(picked.segment);
+        resultBox.className = useHappyChanceBonus ? "result-good" : getResultClass(picked.segment);
+        const bonusMessage = useHappyChanceBonus
+          ? `<div class="segment-chip chance"><span>ハピチャンカード</span><span>💖 +1P</span></div>`
+          : "";
         resultBox.innerHTML = `
-          <span>${category.emoji} ${getResultMessage(category, picked.segment, before, after)}</span>
+          <span>${category.emoji} ${getResultMessage(category, picked.segment, before, after, bonusPoints)}</span>
           ${createResultSegmentHtml(picked.segment)}
-          ${createHappyChanceButtonHtml()}
+          ${bonusMessage}
         `;
         const chanceText = picked.segment.type === "happyChance" ? " / ハピチャンカード +1" : "";
-        addHistory(`${category.label}ルーレット BET${activeBet}: ${picked.segment.label}（実際の変化 ${formatPoints(actualChange)}${ticketBonus ? " / チケット +1" : ""}${chanceText}）`);
+        const bonusText = useHappyChanceBonus ? " / ハピチャンカード使用 +1P" : "";
+        addHistory(`${category.label}ルーレット BET${activeBet}: ${picked.segment.label}（実際の変化 ${formatPoints(actualChange)}${ticketBonus ? " / チケット +1" : ""}${chanceText}${bonusText}）`);
         saveState();
         spinning = false;
         render();
-        if (picked.segment.points > 0) burstConfetti();
-        if (picked.segment.type === "happyChance") {
+        if (picked.segment.points > 0 || useHappyChanceBonus) burstConfetti();
+        if (useHappyChanceBonus && basePoints === 0) {
+          showToast("0Pだったけど、カードで +1P！");
+        } else if (useHappyChanceBonus) {
+          showToast("ハピチャンカードを使ったよ！+1P！");
+        } else if (picked.segment.type === "happyChance") {
           burstConfetti();
           showToast("ハピチャンカードを1枚ゲット！次回+1Pできるよ！");
         } else if (picked.segment.points > 0) {
@@ -3894,7 +4023,9 @@
         latestRouletteResult = null;
         const resultBox = document.getElementById("luckyText");
         resultBox.className = "";
-        resultBox.textContent = `${categories[activeCategory].emoji} ${categories[activeCategory].label}ルーレットを選びました`;
+        resultBox.textContent = happyChanceReserved
+          ? `${categories[activeCategory].emoji} ${categories[activeCategory].label}ルーレットを選びました。次は+1P！`
+          : `${categories[activeCategory].emoji} ${categories[activeCategory].label}ルーレットを選びました`;
         renderWheel();
         renderPoints();
         updateStats();
@@ -3908,7 +4039,9 @@
         latestRouletteResult = null;
         const resultBox = document.getElementById("luckyText");
         resultBox.className = "";
-        resultBox.textContent = `BET${activeBet}を選びました。チケットを${activeBet}まい使います。`;
+        resultBox.textContent = happyChanceReserved
+          ? `BET${activeBet}を選びました。次は+1P！チケットを${activeBet}まい使います。`
+          : `BET${activeBet}を選びました。チケットを${activeBet}まい使います。`;
         renderWheel();
         renderPoints();
         updateStats();
@@ -3922,6 +4055,7 @@
     document.addEventListener("click", event => {
       if (event.target?.id === "useHappyChanceBtn") useHappyChanceCard();
     });
+    document.getElementById("reserveHappyChanceBtn").addEventListener("click", reserveHappyChanceCard);
 
     document.getElementById("infoModalClose").addEventListener("click", closeInfoModal);
     document.getElementById("infoModal").addEventListener("click", event => {
