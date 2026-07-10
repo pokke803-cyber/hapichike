@@ -1031,6 +1031,30 @@
       box-shadow: 0 6px 0 rgba(239, 35, 60, .26);
     }
 
+    .ticket-gift-summary {
+      padding: 14px;
+      border: 3px solid #fff;
+      border-radius: 20px;
+      background: linear-gradient(135deg, #fff8d6, #ffe4f3);
+      box-shadow: 0 7px 0 rgba(255, 143, 171, .18);
+      font-weight: 900;
+      color: #23324d;
+    }
+
+    .ticket-gift-summary strong {
+      color: #ef233c;
+      font-size: 1.45rem;
+    }
+
+    .ticket-gift-confirm {
+      padding: 12px;
+      border: 3px solid #ffd166;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .9);
+      color: #23324d;
+      font-weight: 900;
+    }
+
     .parent-save-row {
       display: flex;
       justify-content: flex-end;
@@ -2402,6 +2426,10 @@
             <strong>PAYポイント振り替え</strong>
             SweetsPAY・ToyPAY・GamePAYのポイントを移動できます。
           </button>
+          <button class="parent-menu-button" type="button" id="openParentTicketGiftBtn">
+            <strong>🎟️ チケットをプレゼント</strong>
+            追加のお手伝いや特別ボーナスとして、チケットを直接追加できます。
+          </button>
         </div>
         <div class="parent-save-row">
           <button class="secondary" type="button" id="parentMenuBackBtn">もどる</button>
@@ -2438,6 +2466,30 @@
         </div>
         <div class="transfer-history-title">振り替え履歴</div>
         <div class="transfer-history-list" id="transferHistoryList"></div>
+      </div>
+      <div class="info-modal-body edit-form parent-panel hidden" id="parentTicketGiftPanel">
+        <p class="parent-note">追加のお手伝いや特別ボーナスとして、チケットを直接プレゼントできます。</p>
+        <div class="ticket-gift-summary">現在のチケット：<strong id="ticketGiftCurrentCount">0枚</strong></div>
+        <div>
+          <strong>追加するチケット</strong>
+          <div class="ticket-choice-row" id="ticketGiftChoices"></div>
+        </div>
+        <label>
+          理由メモ
+          <input id="ticketGiftReasonInput" autocomplete="off" maxlength="60" placeholder="例：食器洗いをもう一回やってくれた">
+        </label>
+        <div class="edit-error" id="ticketGiftMessage" role="status"></div>
+        <div class="ticket-gift-confirm hidden" id="ticketGiftConfirmBox"></div>
+        <div class="edit-actions">
+          <button class="secondary" type="button" id="parentTicketGiftBackBtn">キャンセル</button>
+          <button class="primary" type="button" id="confirmTicketGiftBtn">確認する</button>
+        </div>
+        <div class="edit-actions hidden" id="ticketGiftExecuteActions">
+          <button class="secondary" type="button" id="cancelTicketGiftConfirmBtn">キャンセル</button>
+          <button class="primary" type="button" id="executeTicketGiftBtn">プレゼントする</button>
+        </div>
+        <div class="transfer-history-title">最近のプレゼント</div>
+        <div class="transfer-history-list" id="ticketGiftHistoryList"></div>
       </div>
       <div class="info-modal-body parent-panel hidden" id="parentTaskEditPanel">
         <div class="parent-edit-tools">
@@ -2635,6 +2687,8 @@
     let parentEditingTaskId = null;
     let parentDeleteTaskId = null;
     let parentTaskRewardDraft = 1;
+    let ticketGiftDraftAmount = 1;
+    let ticketGiftPending = null;
     let usePayAmount = { sweets: "", toy: "", game: "" };
 
     function loadState() {
@@ -2649,6 +2703,7 @@
       const tasks = Array.isArray(saved.tasks) ? normalizeTasks(saved.tasks) : defaultTasks.map(task => ({ ...task }));
       const todayTasks = normalizeTodayTasks(saved.todayTasks, tasks);
       if (!Array.isArray(saved.transferHistory)) needsStateSave = true;
+      if (!Array.isArray(saved.ticketGiftLogs)) needsStateSave = true;
       return {
         childName: sanitizeName(saved.childName || ""),
         coins: Number(saved.coins) || 0,
@@ -2657,6 +2712,7 @@
         history: Array.isArray(saved.history) ? saved.history : [],
         payLogs: Array.isArray(saved.payLogs) ? saved.payLogs : [],
         transferHistory: Array.isArray(saved.transferHistory) ? saved.transferHistory : [],
+        ticketGiftLogs: Array.isArray(saved.ticketGiftLogs) ? saved.ticketGiftLogs : [],
         taskHistory: normalizeTaskHistory(saved.taskHistory, tasks),
         parentPassword: String(saved.parentPassword || "1234"),
         badges: Array.isArray(saved.badges) ? saved.badges : [],
@@ -3431,7 +3487,7 @@
     }
 
     function showParentPanel(panelId) {
-      ["parentPasswordPanel", "parentMenuPanel", "parentRewardPanel", "parentPayTransferPanel", "parentTaskEditPanel", "parentTaskFormPanel", "parentDeletePanel"].forEach(id => {
+      ["parentPasswordPanel", "parentMenuPanel", "parentRewardPanel", "parentPayTransferPanel", "parentTicketGiftPanel", "parentTaskEditPanel", "parentTaskFormPanel", "parentDeletePanel"].forEach(id => {
         document.getElementById(id).classList.toggle("hidden", id !== panelId);
       });
     }
@@ -3544,6 +3600,113 @@
       document.getElementById("transferAmountInput").value = "";
       showParentPanel("parentPayTransferPanel");
       renderPayTransferPanel();
+    }
+
+    function openParentTicketGift() {
+      ticketGiftDraftAmount = 1;
+      ticketGiftPending = null;
+      document.getElementById("ticketGiftReasonInput").value = "";
+      document.getElementById("ticketGiftMessage").textContent = "";
+      showParentPanel("parentTicketGiftPanel");
+      renderTicketGiftPanel();
+    }
+
+    function renderTicketGiftPanel() {
+      document.getElementById("ticketGiftCurrentCount").textContent = `${state.coins}枚`;
+      const choices = document.getElementById("ticketGiftChoices");
+      choices.innerHTML = [1, 2, 3, 4, 5, 10].map(amount => `
+        <button class="ticket-choice ${ticketGiftDraftAmount === amount ? "active" : ""}" type="button" data-ticket-gift-amount="${amount}">${amount}枚</button>
+      `).join("");
+      choices.querySelectorAll("[data-ticket-gift-amount]").forEach(button => {
+        button.addEventListener("click", () => {
+          ticketGiftDraftAmount = Number(button.dataset.ticketGiftAmount);
+          clearTicketGiftConfirm();
+          renderTicketGiftPanel();
+        });
+      });
+      renderTicketGiftHistory();
+    }
+
+    function renderTicketGiftHistory() {
+      const list = document.getElementById("ticketGiftHistoryList");
+      const logs = Array.isArray(state.ticketGiftLogs) ? state.ticketGiftLogs : [];
+      if (!logs.length) {
+        list.innerHTML = `<div class="log-item">チケットプレゼント履歴はまだありません。</div>`;
+        return;
+      }
+      list.innerHTML = logs.slice(0, 8).map(item => `
+        <div class="transfer-history-item">
+          <small>${escapeHtml(item.date || "")}</small>
+          +${Number(item.amount) || 0}枚 ${item.reason ? ` ${escapeHtml(item.reason)}` : ""}
+        </div>
+      `).join("");
+    }
+
+    function clearTicketGiftConfirm() {
+      ticketGiftPending = null;
+      document.getElementById("ticketGiftConfirmBox").classList.add("hidden");
+      document.getElementById("ticketGiftConfirmBox").textContent = "";
+      document.getElementById("ticketGiftExecuteActions").classList.add("hidden");
+      document.getElementById("confirmTicketGiftBtn").disabled = false;
+    }
+
+    function confirmTicketGift() {
+      const amount = Number(ticketGiftDraftAmount);
+      const reasonInput = document.getElementById("ticketGiftReasonInput");
+      const message = document.getElementById("ticketGiftMessage");
+      const reason = reasonInput.value.trim();
+      message.textContent = "";
+
+      if (!Number.isInteger(amount) || amount < 1 || amount > 10) {
+        message.textContent = "チケット枚数は1〜10枚で選んでください";
+        return;
+      }
+
+      ticketGiftPending = {
+        amount,
+        reason: reason || "親からのチケットプレゼント"
+      };
+      const confirmBox = document.getElementById("ticketGiftConfirmBox");
+      confirmBox.innerHTML = `
+        チケットを${amount}枚プレゼントします。よろしいですか？
+        ${reason ? `<br>理由：${escapeHtml(reason)}` : ""}
+      `;
+      confirmBox.classList.remove("hidden");
+      document.getElementById("ticketGiftExecuteActions").classList.remove("hidden");
+      document.getElementById("confirmTicketGiftBtn").disabled = true;
+    }
+
+    function executeTicketGift() {
+      if (!ticketGiftPending) return;
+      const amount = Number(ticketGiftPending.amount);
+      if (!Number.isInteger(amount) || amount < 1 || amount > 10) return;
+      const reason = ticketGiftPending.reason || "親からのチケットプレゼント";
+      state.coins += amount;
+      const log = {
+        id: `ticket-gift-${Date.now()}`,
+        type: "ticketGift",
+        amount,
+        reason,
+        createdAt: nowIsoString(),
+        date: todayString()
+      };
+      state.ticketGiftLogs.unshift(log);
+      state.ticketGiftLogs = state.ticketGiftLogs.slice(0, 50);
+      addHistory(`親からチケット${amount}枚プレゼント`, "ticketGift", {
+        amount,
+        reason,
+        createdAt: log.createdAt
+      });
+      ticketGiftDraftAmount = 1;
+      ticketGiftPending = null;
+      document.getElementById("ticketGiftReasonInput").value = "";
+      document.getElementById("ticketGiftMessage").textContent = `チケットを${amount}枚プレゼントしました！`;
+      clearTicketGiftConfirm();
+      saveState();
+      render();
+      openParentTicketGift();
+      document.getElementById("ticketGiftMessage").textContent = `チケットを${amount}枚プレゼントしました！`;
+      showToast(`チケットを${amount}枚プレゼントしました！`);
     }
 
     function renderPayTransferPanel() {
@@ -3883,7 +4046,13 @@
         }).join("")
         : `<div class="log-item">お手伝いかんりょうきろくはまだありません。</div>`;
       const historyHtml = state.history.length
-        ? state.history.map(item => `
+        ? state.history.map(item => item.type === "ticketGift" ? `
+          <div class="log-item pay-log-item">
+            🎟️ 親からチケット${Number(item.amount) || 0}枚プレゼント
+            ${item.reason ? `<span class="pay-log-detail">理由：${escapeHtml(item.reason)}</span>` : ""}
+            <span class="log-date">${escapeHtml(item.date || "")}</span>
+          </div>
+        ` : `
           <div class="log-item">${escapeHtml(item.text)}<span class="log-date">${escapeHtml(item.date)}</span></div>
         `).join("")
         : `<div class="log-item">まだきろくはありません。お手伝いをクリアして、最初のチケットを集めよう。</div>`;
@@ -4339,9 +4508,17 @@
     document.getElementById("openParentTaskEditBtn").addEventListener("click", openParentTaskEditPage);
     document.getElementById("openParentRewardOnlyBtn").addEventListener("click", openParentRewardSettings);
     document.getElementById("openParentPayTransferBtn").addEventListener("click", openParentPayTransfer);
+    document.getElementById("openParentTicketGiftBtn").addEventListener("click", openParentTicketGift);
     document.getElementById("parentRewardBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentPayTransferBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("confirmPayTransferBtn").addEventListener("click", executePayTransfer);
+    document.getElementById("parentTicketGiftBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("confirmTicketGiftBtn").addEventListener("click", confirmTicketGift);
+    document.getElementById("cancelTicketGiftConfirmBtn").addEventListener("click", () => {
+      clearTicketGiftConfirm();
+      document.getElementById("ticketGiftMessage").textContent = "";
+    });
+    document.getElementById("executeTicketGiftBtn").addEventListener("click", executeTicketGift);
     document.getElementById("parentTaskEditBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("addParentTaskBtn").addEventListener("click", () => openParentTaskForm());
     document.getElementById("parentTaskFormPanel").addEventListener("submit", saveParentTaskForm);
