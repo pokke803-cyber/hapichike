@@ -460,7 +460,7 @@
 
     .status-bar {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -486,6 +486,43 @@
       font-size: clamp(1.35rem, 4vw, 2.1rem);
       font-weight: 900;
       line-height: 1;
+    }
+
+    .audio-meter {
+      display: grid;
+      gap: 8px;
+    }
+
+    .audio-controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .audio-toggle {
+      min-height: 38px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffd166, #ff8fab);
+      color: #fff;
+      font-weight: 900;
+      box-shadow: 0 5px 0 rgba(239, 35, 60, .24);
+      cursor: pointer;
+      text-shadow: 0 1px 0 rgba(39, 48, 67, .25);
+    }
+
+    .audio-toggle.off {
+      background: linear-gradient(135deg, #e2e8f0, #f8fafc);
+      color: #64748b;
+      box-shadow: 0 5px 0 rgba(100, 116, 139, .16);
+      text-shadow: none;
+    }
+
+    .audio-hint {
+      font-size: .72rem;
+      color: #64748b;
+      font-weight: 900;
+      line-height: 1.25;
     }
 
     .chip {
@@ -2258,6 +2295,14 @@
           <div class="meter-label">がんばりレベル</div>
           <div class="meter-value" id="levelText">1</div>
         </div>
+        <div class="meter audio-meter">
+          <div class="meter-label">🔊 音設定</div>
+          <div class="audio-controls">
+            <button class="audio-toggle" id="bgmToggleBtn" type="button">BGM ON</button>
+            <button class="audio-toggle" id="sfxToggleBtn" type="button">効果音 ON</button>
+          </div>
+          <div class="audio-hint" id="audioHint">タップ後に音が流れるよ</div>
+        </div>
       </section>
 
       <nav class="tabs" aria-label="メニュー">
@@ -2669,6 +2714,18 @@
       { id: "game", category: "game", label: "GamePAY🎮", icon: "🎮", description: "ゲームのごほうびに使えるよ" }
     ];
 
+    const audioSources = {
+      bgm: "public/audio/bgm-pop-loop.mp3",
+      complete: "public/audio/sfx-complete.mp3",
+      ticket: "public/audio/sfx-ticket.mp3",
+      rouletteStart: "public/audio/sfx-roulette-start.mp3",
+      rouletteStop: "public/audio/sfx-roulette-stop.mp3",
+      success: "public/audio/sfx-success.mp3",
+      card: "public/audio/sfx-card.mp3",
+      click: "public/audio/sfx-click.mp3",
+      error: "public/audio/sfx-error.mp3"
+    };
+
     const icons = ["🧹", "📚", "🪥", "🥗", "😊", "🧺", "🌱", "🧽", "📝", "🎵"];
     let needsStateSave = false;
     let state = loadState();
@@ -2690,6 +2747,12 @@
     let ticketGiftDraftAmount = 1;
     let ticketGiftPending = null;
     let usePayAmount = { sweets: "", toy: "", game: "" };
+    let audioUnlocked = false;
+    let audioContext = null;
+    let bgmAudio = null;
+    let bgmFallbackTimer = null;
+    let bgmFallbackStep = 0;
+    const sfxAudio = {};
 
     function loadState() {
       try {
@@ -2704,6 +2767,7 @@
       const todayTasks = normalizeTodayTasks(saved.todayTasks, tasks);
       if (!Array.isArray(saved.transferHistory)) needsStateSave = true;
       if (!Array.isArray(saved.ticketGiftLogs)) needsStateSave = true;
+      if (!saved.audioSettings) needsStateSave = true;
       return {
         childName: sanitizeName(saved.childName || ""),
         coins: Number(saved.coins) || 0,
@@ -2716,6 +2780,12 @@
         taskHistory: normalizeTaskHistory(saved.taskHistory, tasks),
         parentPassword: String(saved.parentPassword || "1234"),
         badges: Array.isArray(saved.badges) ? saved.badges : [],
+        audioSettings: {
+          bgmEnabled: saved.audioSettings?.bgmEnabled !== false,
+          sfxEnabled: saved.audioSettings?.sfxEnabled !== false,
+          bgmVolume: Math.min(1, Math.max(0, Number(saved.audioSettings?.bgmVolume) || 0.22)),
+          sfxVolume: Math.min(1, Math.max(0, Number(saved.audioSettings?.sfxVolume) || 0.62))
+        },
         happyChanceCards: Math.max(0, Number(saved.happyChanceCards) || 0),
         points: {
           snack: Number(saved.points?.snack) || 0,
@@ -2876,6 +2946,168 @@
       localStorage.setItem(storageKey, JSON.stringify(state));
     }
 
+    function ensureAudioElements() {
+      if (!bgmAudio) {
+        bgmAudio = new Audio(audioSources.bgm);
+        bgmAudio.loop = true;
+        bgmAudio.preload = "auto";
+        bgmAudio.volume = state.audioSettings.bgmVolume;
+        bgmAudio.addEventListener("error", () => {
+          if (state.audioSettings.bgmEnabled && audioUnlocked) startFallbackBgm();
+        });
+      }
+
+      Object.entries(audioSources).forEach(([key, src]) => {
+        if (key === "bgm" || sfxAudio[key]) return;
+        const audio = new Audio(src);
+        audio.preload = "auto";
+        audio.volume = state.audioSettings.sfxVolume;
+        sfxAudio[key] = audio;
+      });
+    }
+
+    function getAudioContext() {
+      if (!audioContext) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return null;
+        audioContext = new AudioContextClass();
+      }
+      if (audioContext.state === "suspended") audioContext.resume().catch(() => {});
+      return audioContext;
+    }
+
+    function playTone(frequency, duration = .12, type = "triangle", volume = .05, delay = 0) {
+      const context = getAudioContext();
+      if (!context) return;
+      const start = context.currentTime + delay;
+      const osc = context.createOscillator();
+      const gain = context.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(frequency, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(volume, start + .02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+      osc.connect(gain);
+      gain.connect(context.destination);
+      osc.start(start);
+      osc.stop(start + duration + .02);
+    }
+
+    function playFallbackSfx(name) {
+      if (!state.audioSettings.sfxEnabled || !audioUnlocked) return;
+      const patterns = {
+        complete: [[523, .1], [659, .11, .08], [784, .14, .17]],
+        ticket: [[740, .08], [988, .12, .09]],
+        rouletteStart: [[196, .08], [247, .08, .08], [294, .08, .16]],
+        rouletteStop: [[784, .09], [523, .12, .1]],
+        success: [[659, .09], [784, .1, .08], [1046, .15, .18]],
+        card: [[880, .1], [1175, .12, .1]],
+        click: [[520, .045]],
+        error: [[180, .12, 0, "sawtooth", .035]]
+      };
+      (patterns[name] || patterns.click).forEach(([freq, duration, delay = 0, type = "triangle", volume = .045]) => {
+        playTone(freq, duration, type, volume * state.audioSettings.sfxVolume, delay);
+      });
+    }
+
+    function startFallbackBgm() {
+      if (bgmFallbackTimer || !state.audioSettings.bgmEnabled || !audioUnlocked) return;
+      const notes = [392, 494, 587, 494, 440, 523, 659, 523];
+      bgmFallbackTimer = setInterval(() => {
+        if (!state.audioSettings.bgmEnabled || !audioUnlocked) return;
+        playTone(notes[bgmFallbackStep % notes.length], .18, "sine", .018 * state.audioSettings.bgmVolume);
+        if (bgmFallbackStep % 2 === 0) playTone(196, .08, "triangle", .01 * state.audioSettings.bgmVolume, .02);
+        bgmFallbackStep += 1;
+      }, 720);
+    }
+
+    function stopFallbackBgm() {
+      if (!bgmFallbackTimer) return;
+      clearInterval(bgmFallbackTimer);
+      bgmFallbackTimer = null;
+    }
+
+    function startBgm() {
+      if (!state.audioSettings.bgmEnabled || !audioUnlocked) return;
+      ensureAudioElements();
+      bgmAudio.volume = state.audioSettings.bgmVolume;
+      const playPromise = bgmAudio.play();
+      if (playPromise) {
+        playPromise
+          .then(() => stopFallbackBgm())
+          .catch(() => startFallbackBgm());
+      }
+    }
+
+    function stopBgm() {
+      if (bgmAudio) bgmAudio.pause();
+      stopFallbackBgm();
+    }
+
+    function unlockAudio() {
+      if (audioUnlocked) return;
+      audioUnlocked = true;
+      ensureAudioElements();
+      getAudioContext();
+      if (state.audioSettings.bgmEnabled) startBgm();
+      renderAudioControls();
+    }
+
+    function playSfx(name) {
+      if (!state.audioSettings.sfxEnabled || !audioUnlocked) return;
+      ensureAudioElements();
+      const source = sfxAudio[name] || sfxAudio.click;
+      if (!source) {
+        playFallbackSfx(name);
+        return;
+      }
+      const audio = source.cloneNode();
+      audio.volume = state.audioSettings.sfxVolume;
+      const playPromise = audio.play();
+      if (playPromise) playPromise.catch(() => playFallbackSfx(name));
+    }
+
+    function renderAudioControls() {
+      const bgmButton = document.getElementById("bgmToggleBtn");
+      const sfxButton = document.getElementById("sfxToggleBtn");
+      const hint = document.getElementById("audioHint");
+      if (!bgmButton || !sfxButton || !hint) return;
+      bgmButton.textContent = state.audioSettings.bgmEnabled ? "BGM ON" : "BGM OFF";
+      sfxButton.textContent = state.audioSettings.sfxEnabled ? "効果音 ON" : "効果音 OFF";
+      bgmButton.classList.toggle("off", !state.audioSettings.bgmEnabled);
+      sfxButton.classList.toggle("off", !state.audioSettings.sfxEnabled);
+      hint.textContent = audioUnlocked
+        ? "音設定は保存されるよ"
+        : "タップ後に音が流れるよ";
+    }
+
+    function toggleBgm() {
+      unlockAudio();
+      state.audioSettings.bgmEnabled = !state.audioSettings.bgmEnabled;
+      saveState();
+      renderAudioControls();
+      if (state.audioSettings.bgmEnabled) {
+        startBgm();
+        showToast("BGMをONにしました。");
+      } else {
+        stopBgm();
+        showToast("BGMをOFFにしました。");
+      }
+    }
+
+    function toggleSfx() {
+      unlockAudio();
+      state.audioSettings.sfxEnabled = !state.audioSettings.sfxEnabled;
+      saveState();
+      renderAudioControls();
+      if (state.audioSettings.sfxEnabled) {
+        playSfx("success");
+        showToast("効果音をONにしました。");
+      } else {
+        showToast("効果音をOFFにしました。");
+      }
+    }
+
     function sanitizeName(value) {
       return String(value || "").trim().replace(/\s+/g, " ").slice(0, 12);
     }
@@ -2958,6 +3190,7 @@
       renderWheel();
       renderPoints();
       updateStats();
+      renderAudioControls();
     }
 
     function updateStats() {
@@ -3447,6 +3680,7 @@
       });
 
       if (!addedCount) {
+        playSfx("error");
         showToast("追加できるお手伝いがありません。");
         renderBulkTaskPicker();
         return;
@@ -3458,6 +3692,7 @@
       activeStatusTab = "active";
       closeBulkTaskPicker();
       render();
+      playSfx("success");
       showToast(`${addedCount}つのお手伝いを追加しました！`);
     }
 
@@ -3706,6 +3941,7 @@
       render();
       openParentTicketGift();
       document.getElementById("ticketGiftMessage").textContent = `チケットを${amount}枚プレゼントしました！`;
+      playSfx("ticket");
       showToast(`チケットを${amount}枚プレゼントしました！`);
     }
 
@@ -3796,6 +4032,7 @@
       message.className = "edit-error pay-message success";
       render();
       renderPayTransferPanel();
+      playSfx("success");
       showToast("PAYポイントを振り替えました。");
     }
 
@@ -4179,6 +4416,7 @@
       const resultBox = document.getElementById("luckyText");
       resultBox.className = "result-good";
       resultBox.textContent = "💖 ハピチャンカード予約中！次のルーレットは +1P！";
+      playSfx("card");
       showToast("ハピチャンカードを予約したよ！次は+1P！");
     }
 
@@ -4217,6 +4455,8 @@
       saveState();
       render();
       burstConfetti();
+      playSfx("complete");
+      playSfx("ticket");
       showToast(`やったね！チケット${today.ticketReward}枚ゲット！`);
     }
 
@@ -4249,10 +4489,12 @@
     function spinWheel() {
       if (spinning) return;
       if (state.coins < activeBet) {
+        playSfx("error");
         showToast(`チケットがあと ${activeBet - state.coins} まい必要です。お手伝いで集めよう。`);
         return;
       }
       spinning = true;
+      playSfx("rouletteStart");
       latestRouletteResult = null;
       const useHappyChanceBonus = happyChanceReserved && state.happyChanceCards > 0;
       if (useHappyChanceBonus) {
@@ -4303,17 +4545,23 @@
         saveState();
         spinning = false;
         render();
+        playSfx("rouletteStop");
         if (picked.segment.points > 0 || useHappyChanceBonus) burstConfetti();
         if (useHappyChanceBonus && basePoints === 0) {
+          playSfx("card");
           showToast("0Pだったけど、カードで +1P！");
         } else if (useHappyChanceBonus) {
+          playSfx("card");
           showToast("ハピチャンカードを使ったよ！+1P！");
         } else if (picked.segment.type === "happyChance") {
           burstConfetti();
+          playSfx("card");
           showToast("ハピチャンカードを1枚ゲット！次回+1Pできるよ！");
         } else if (picked.segment.points > 0) {
+          playSfx(picked.segment.points >= 10 ? "success" : "ticket");
           showToast(`${category.pointName} ${formatPoints(picked.segment.points)}！`);
         } else {
+          playSfx("ticket");
           showToast("ポイントはそのまま！チケットが1まい戻ってきたよ。");
         }
       }, 3700);
@@ -4339,6 +4587,7 @@
       renderPoints();
       updateStats();
       burstConfetti();
+      playSfx("card");
       showToast("やったね！カードで1Pアップ！");
     }
 
@@ -4356,16 +4605,19 @@
       const current = state.points[pay.category] || 0;
 
       if (!usePayAmount[payId]) {
+        playSfx("error");
         setPayMessage(payId, "つかうポイントを入力してね", "error");
         return;
       }
 
       if (!Number.isInteger(amount) || amount <= 0) {
+        playSfx("error");
         setPayMessage(payId, "1以上の数字を入れてね", "error");
         return;
       }
 
       if (amount > current) {
+        playSfx("error");
         setPayMessage(payId, "ポイントがたりないよ", "error");
         return;
       }
@@ -4379,6 +4631,7 @@
       render();
       setPayMessage(payId, `${pay.label}を${amount}Pつかったよ！`, "success");
       burstConfetti();
+      playSfx("success");
       showToast(`${pay.label}を${amount}Pつかったよ！`);
     }
 
@@ -4433,6 +4686,14 @@
         .replaceAll('"', "&quot;");
     }
 
+    document.addEventListener("pointerdown", unlockAudio, { once: true });
+    document.addEventListener("keydown", unlockAudio, { once: true });
+
+    document.addEventListener("click", event => {
+      const button = event.target.closest("button");
+      if (button && !button.disabled) playSfx("click");
+    });
+
     document.querySelectorAll(".tab").forEach(button => {
       button.addEventListener("click", () => {
         document.querySelectorAll(".tab").forEach(tab => tab.classList.remove("active"));
@@ -4482,6 +4743,8 @@
       if (event.target?.id === "useHappyChanceBtn") useHappyChanceCard();
     });
     document.getElementById("reserveHappyChanceBtn").addEventListener("click", reserveHappyChanceCard);
+    document.getElementById("bgmToggleBtn").addEventListener("click", toggleBgm);
+    document.getElementById("sfxToggleBtn").addEventListener("click", toggleSfx);
 
     document.getElementById("infoModalClose").addEventListener("click", closeInfoModal);
     document.getElementById("infoModal").addEventListener("click", event => {
