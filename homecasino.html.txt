@@ -1420,6 +1420,53 @@
       color: #273043;
     }
 
+    .bet-panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 9px;
+    }
+
+    .bet-panel-head strong {
+      margin-bottom: 0;
+    }
+
+    .bet-ticket-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 7px 10px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffd166, #fff8d6);
+      color: #273043;
+      font-size: .82rem;
+      font-weight: 900;
+      box-shadow: 0 5px 0 rgba(255, 159, 28, .18);
+      white-space: nowrap;
+    }
+
+    .bet-ticket-badge span {
+      color: #ef233c;
+      font-size: 1.12rem;
+      line-height: 1;
+      text-shadow: 0 1px 0 rgba(255, 255, 255, .7);
+    }
+
+    .bet-help-text {
+      min-height: 1.3em;
+      margin-top: 9px;
+      color: #7c3aed;
+      font-size: .84rem;
+      font-weight: 900;
+      line-height: 1.35;
+    }
+
+    .bet-help-text.warning {
+      color: #ef233c;
+    }
+
     .happy-chance-panel {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -1535,6 +1582,7 @@
       opacity: .42;
       transform: none;
       box-shadow: none;
+      filter: grayscale(.25);
     }
 
     .segment-list {
@@ -2354,7 +2402,10 @@
           </div>
           <div class="roulette-side">
             <div class="bet-panel">
-              <strong>BETをえらぶ</strong>
+              <div class="bet-panel-head">
+                <strong>BETをえらぶ</strong>
+                <div class="bet-ticket-badge">🎟️ 残りチケット：<span id="betTicketCount">0枚</span></div>
+              </div>
               <div class="bet-buttons" id="betButtons" aria-label="BET数">
                 <button class="bet-button active" data-bet="1">1</button>
                 <button class="bet-button" data-bet="2">2</button>
@@ -2362,6 +2413,7 @@
                 <button class="bet-button" data-bet="4">4</button>
                 <button class="bet-button" data-bet="5">5</button>
               </div>
+              <div class="bet-help-text" id="betTicketHelp">BET分のチケットを使って回すよ</div>
             </div>
             <div class="info-buttons">
               <button class="info-button" data-info="how">🎟️ 遊び方</button>
@@ -3200,12 +3252,37 @@
       document.getElementById("activeCategoryDisplay").textContent = categories[activeCategory].label;
       document.getElementById("activeBetDisplay").textContent = activeBet;
       document.getElementById("happyChanceDisplay").textContent = `${state.happyChanceCards}枚`;
+      document.getElementById("betTicketCount").textContent = `${state.coins}枚`;
       renderHappyChanceReserve();
       document.getElementById("spinBtn").disabled = state.coins < activeBet || spinning;
+      updateBetControls();
       document.getElementById("doneCount").textContent = done;
       document.getElementById("taskTotal").textContent = state.todayTasks.length;
       document.getElementById("levelText").textContent = Math.max(1, Math.floor((state.history.length + state.coins) / 6) + 1);
       renderBadges(done);
+    }
+
+    function updateBetControls() {
+      const help = document.getElementById("betTicketHelp");
+      document.querySelectorAll(".bet-button").forEach(button => {
+        const bet = Number(button.dataset.bet);
+        const disabled = spinning || bet > state.coins;
+        button.classList.toggle("active", bet === activeBet);
+        button.disabled = disabled;
+        button.title = bet > state.coins ? "チケットが足りないよ" : `${bet}BETで回す`;
+        button.setAttribute("aria-disabled", String(disabled));
+      });
+
+      if (state.coins <= 0) {
+        help.textContent = "チケットがないよ。お手伝いでゲットしよう！";
+        help.classList.add("warning");
+      } else if (state.coins < activeBet) {
+        help.textContent = `今は${state.coins}BETまで選べるよ。`;
+        help.classList.add("warning");
+      } else {
+        help.textContent = `BET${activeBet}で回すと、チケットを${activeBet}枚使うよ。`;
+        help.classList.remove("warning");
+      }
     }
 
     function renderHappyChanceReserve() {
@@ -3291,12 +3368,6 @@
 
       document.querySelectorAll(".category-tab").forEach(button => {
         button.classList.toggle("active", button.dataset.category === activeCategory);
-      });
-
-      document.querySelectorAll(".bet-button").forEach(button => {
-        const bet = Number(button.dataset.bet);
-        button.classList.toggle("active", bet === activeBet);
-        button.disabled = bet > state.coins && bet !== activeBet;
       });
     }
 
