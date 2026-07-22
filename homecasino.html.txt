@@ -639,6 +639,49 @@
       color: #273043;
     }
 
+    .mail-card-panel {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+      padding: 13px;
+      border: 3px solid #fff;
+      border-radius: 22px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, .92), rgba(223, 247, 255, .9));
+      box-shadow: 0 7px 0 rgba(56, 189, 248, .18);
+    }
+
+    .mail-card-panel strong {
+      color: #273043;
+      font-size: 1.03rem;
+      line-height: 1.25;
+    }
+
+    .mail-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mail-card-button {
+      min-height: 44px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      padding: 9px 14px;
+      background: linear-gradient(135deg, #ff8fab, #ffd166);
+      color: #fff;
+      font-weight: 900;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .26);
+      box-shadow: 0 6px 0 rgba(239, 35, 60, .22);
+      cursor: pointer;
+    }
+
+    .mail-card-status {
+      color: #64748b;
+      font-size: .84rem;
+      font-weight: 900;
+    }
+
     .task-card, .reward-card, .log-item {
       border: 3px solid rgba(255, 255, 255, .9);
       border-radius: 16px;
@@ -2431,6 +2474,13 @@
         <div class="shop-hero">
           <h2 class="shop-title">ハピチケSHOP</h2>
           <p class="shop-subtitle">ルーレットでためたPAYポイントを、家族と相談してごほうびに使おう。</p>
+          <div class="mail-card-panel">
+            <strong>💌 今日のハピチケカードを親にメールできます</strong>
+            <div class="mail-card-actions">
+              <button class="mail-card-button" id="sendHapichikeCardEmailBtn" type="button">✉️ メールで送る</button>
+              <span class="mail-card-status" id="mailShareStatus">親メール未設定</span>
+            </div>
+          </div>
         </div>
         <div class="reward-grid" id="rewardList"></div>
       </section>
@@ -2527,6 +2577,10 @@
             <strong>🎟️ チケットをプレゼント</strong>
             追加のお手伝いや特別ボーナスとして、チケットを直接追加できます。
           </button>
+          <button class="parent-menu-button" type="button" id="openParentEmailSettingsBtn">
+            <strong>💌 親メール設定</strong>
+            今日のハピチケカードを送るメールアドレスを登録できます。
+          </button>
         </div>
         <div class="parent-save-row">
           <button class="secondary" type="button" id="parentMenuBackBtn">もどる</button>
@@ -2563,6 +2617,18 @@
         </div>
         <div class="transfer-history-title">振り替え履歴</div>
         <div class="transfer-history-list" id="transferHistoryList"></div>
+      </div>
+      <div class="info-modal-body edit-form parent-panel hidden" id="parentEmailPanel">
+        <p class="parent-note">今日のハピチケカードを送る、親のメールアドレスを設定します。</p>
+        <label>
+          親のメールアドレス
+          <input id="parentEmailInput" type="email" autocomplete="email" placeholder="example@gmail.com">
+        </label>
+        <div class="edit-error" id="parentEmailMessage" role="status"></div>
+        <div class="edit-actions">
+          <button class="secondary" type="button" id="parentEmailBackBtn">もどる</button>
+          <button class="primary" type="button" id="saveParentEmailBtn">保存</button>
+        </div>
       </div>
       <div class="info-modal-body edit-form parent-panel hidden" id="parentTicketGiftPanel">
         <p class="parent-note">追加のお手伝いや特別ボーナスとして、チケットを直接プレゼントできます。</p>
@@ -2649,6 +2715,7 @@
 
   <script>
     const storageKey = "kidsVegasCasino.v1";
+    const parentEmailStorageKey = "kidsVegasCasino.parentEmail.v1";
     const defaultTasks = [
       { id: "feed-pet", icon: "🐟", title: "生き物のごはんあつめ", difficulty: "easy", ticketReward: 1, category: "creature", status: "idle", isDefault: true },
       { id: "toy-clean", icon: "🧸", title: "おもちゃの片づけ", difficulty: "easy", ticketReward: 1, category: "cleanup", status: "idle", isDefault: true },
@@ -2820,6 +2887,7 @@
       if (!Array.isArray(saved.transferHistory)) needsStateSave = true;
       if (!Array.isArray(saved.ticketGiftLogs)) needsStateSave = true;
       if (!saved.audioSettings) needsStateSave = true;
+      const parentEmail = loadParentEmail(saved.parentEmail || "");
       return {
         childName: sanitizeName(saved.childName || ""),
         coins: Number(saved.coins) || 0,
@@ -2831,6 +2899,7 @@
         ticketGiftLogs: Array.isArray(saved.ticketGiftLogs) ? saved.ticketGiftLogs : [],
         taskHistory: normalizeTaskHistory(saved.taskHistory, tasks),
         parentPassword: String(saved.parentPassword || "1234"),
+        parentEmail,
         badges: Array.isArray(saved.badges) ? saved.badges : [],
         audioSettings: {
           bgmEnabled: saved.audioSettings?.bgmEnabled !== false,
@@ -2845,6 +2914,14 @@
           game: Number(saved.points?.game) || 0
         }
       };
+    }
+
+    function loadParentEmail(fallback = "") {
+      try {
+        const savedEmail = localStorage.getItem(parentEmailStorageKey);
+        if (savedEmail !== null) return sanitizeEmail(savedEmail);
+      } catch (error) {}
+      return sanitizeEmail(fallback);
     }
 
     function normalizeTodayTasks(savedTodayTasks, tasks) {
@@ -2996,6 +3073,10 @@
 
     function saveState() {
       localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    function saveParentEmailToStorage(email) {
+      localStorage.setItem(parentEmailStorageKey, email);
     }
 
     function ensureAudioElements() {
@@ -3164,6 +3245,23 @@
       return String(value || "").trim().replace(/\s+/g, " ").slice(0, 12);
     }
 
+    function sanitizeEmail(value) {
+      return String(value || "").trim().slice(0, 120);
+    }
+
+    function isValidEmail(value) {
+      const email = sanitizeEmail(value);
+      return Boolean(email) && email.includes("@") && email.includes(".") && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    function maskEmail(email) {
+      const value = sanitizeEmail(email);
+      const [name, domain] = value.split("@");
+      if (!name || !domain) return value;
+      const visible = name.slice(0, Math.min(3, name.length));
+      return `${visible}${name.length > 3 ? "***" : ""}@${domain}`;
+    }
+
     function todayString() {
       return new Intl.DateTimeFormat("ja-JP", {
         month: "numeric",
@@ -3243,6 +3341,7 @@
       renderPoints();
       updateStats();
       renderAudioControls();
+      renderMailShareStatus();
     }
 
     function updateStats() {
@@ -3313,6 +3412,14 @@
       status.textContent = "使うと次のルーレット結果に +1P！";
       button.textContent = "カードで +1P";
       button.disabled = spinning;
+    }
+
+    function renderMailShareStatus() {
+      const status = document.getElementById("mailShareStatus");
+      if (!status) return;
+      status.textContent = isValidEmail(state.parentEmail)
+        ? `送信先：${maskEmail(state.parentEmail)}`
+        : "親メール未設定";
     }
 
     function renderAccount() {
@@ -3777,6 +3884,7 @@
       document.getElementById("parentRewardMessage").textContent = "";
       document.getElementById("transferMessage").textContent = "";
       document.getElementById("transferAmountInput").value = "";
+      document.getElementById("parentEmailMessage").textContent = "";
       showParentPanel("parentPasswordPanel");
       document.getElementById("parentSettingsModal").classList.remove("hidden");
       setTimeout(() => document.getElementById("parentPasswordInput").focus(), 0);
@@ -3787,13 +3895,14 @@
       document.getElementById("parentPasswordError").textContent = "";
       document.getElementById("parentRewardMessage").textContent = "";
       document.getElementById("transferMessage").textContent = "";
+      document.getElementById("parentEmailMessage").textContent = "";
       parentRewardDraft = {};
       parentEditingTaskId = null;
       parentDeleteTaskId = null;
     }
 
     function showParentPanel(panelId) {
-      ["parentPasswordPanel", "parentMenuPanel", "parentRewardPanel", "parentPayTransferPanel", "parentTicketGiftPanel", "parentTaskEditPanel", "parentTaskFormPanel", "parentDeletePanel"].forEach(id => {
+      ["parentPasswordPanel", "parentMenuPanel", "parentRewardPanel", "parentPayTransferPanel", "parentEmailPanel", "parentTicketGiftPanel", "parentTaskEditPanel", "parentTaskFormPanel", "parentDeletePanel"].forEach(id => {
         document.getElementById(id).classList.toggle("hidden", id !== panelId);
       });
     }
@@ -3906,6 +4015,44 @@
       document.getElementById("transferAmountInput").value = "";
       showParentPanel("parentPayTransferPanel");
       renderPayTransferPanel();
+    }
+
+    function openParentEmailSettings() {
+      document.getElementById("parentEmailInput").value = state.parentEmail || "";
+      document.getElementById("parentEmailMessage").textContent = "";
+      document.getElementById("parentEmailMessage").className = "edit-error";
+      showParentPanel("parentEmailPanel");
+      setTimeout(() => document.getElementById("parentEmailInput").focus(), 0);
+    }
+
+    function saveParentEmail() {
+      const input = document.getElementById("parentEmailInput");
+      const message = document.getElementById("parentEmailMessage");
+      const email = sanitizeEmail(input.value);
+      message.className = "edit-error";
+
+      if (!email) {
+        message.textContent = "メールアドレスを入力してください";
+        playSfx("error");
+        input.focus();
+        return;
+      }
+
+      if (!isValidEmail(email)) {
+        message.textContent = "メールアドレスの形式を確認してください";
+        playSfx("error");
+        input.focus();
+        return;
+      }
+
+      state.parentEmail = email;
+      saveParentEmailToStorage(email);
+      saveState();
+      renderMailShareStatus();
+      message.textContent = "親のメールアドレスを保存しました";
+      message.className = "edit-error pay-message success";
+      playSfx("success");
+      showToast("親のメールアドレスを保存しました。");
     }
 
     function openParentTicketGift() {
@@ -4316,6 +4463,56 @@
       });
     }
 
+    function getHapichikeCardSubject() {
+      const name = sanitizeName(state.childName);
+      return name ? `${name}の今日のハピチケカード` : "今日のハピチケカード";
+    }
+
+    function getHapichikeCardBody() {
+      const name = sanitizeName(state.childName);
+      const title = name ? `${name}の今日のハピチケカード` : "今日のハピチケカード";
+      const lines = [
+        title,
+        "",
+        `🍩 SweetsPAY：${Number(state.points.snack) || 0}P`,
+        `🤖 ToyPAY：${Number(state.points.toy) || 0}P`,
+        `🎮 GamePAY：${Number(state.points.game) || 0}P`,
+        `🎟️ チケット：${Number(state.coins) || 0}枚`,
+        `💖 ハピチャンカード：${Number(state.happyChanceCards) || 0}枚`,
+        "",
+        `作成：${todayString()}`,
+        "",
+        "出先で使うときの確認用です。",
+        "画像版が必要な場合は、アプリ内のカードをスクリーンショットしてください。"
+      ];
+      return lines.join("\n");
+    }
+
+    function sendHapichikeCardEmail() {
+      const email = sanitizeEmail(state.parentEmail);
+      if (!isValidEmail(email)) {
+        showToast("親管理画面でメールアドレスを登録してください。");
+        openParentSettings();
+        document.getElementById("parentPasswordError").textContent = "メール送信には、親のメールアドレス設定が必要です";
+        playSfx("error");
+        return;
+      }
+
+      const subject = getHapichikeCardSubject();
+      const body = getHapichikeCardBody();
+      const mailto = `mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      addHistory("今日のハピチケカードのメール作成画面を開きました", "hapichikeCardEmailShared", {
+        to: email,
+        subject,
+        createdAt: nowIsoString()
+      });
+      saveState();
+      renderHistory();
+      playSfx("success");
+      showToast("メール作成画面を開きます。");
+      window.location.href = mailto;
+    }
+
     function renderHistory() {
       const list = document.getElementById("historyList");
       const payLogs = state.payLogs || [];
@@ -4358,6 +4555,12 @@
           <div class="log-item pay-log-item">
             🎟️ 親からチケット${Number(item.amount) || 0}枚プレゼント
             ${item.reason ? `<span class="pay-log-detail">理由：${escapeHtml(item.reason)}</span>` : ""}
+            <span class="log-date">${escapeHtml(item.date || "")}</span>
+          </div>
+        ` : item.type === "hapichikeCardEmailShared" ? `
+          <div class="log-item pay-log-item">
+            💌 今日のハピチケカードのメール作成画面を開きました
+            <span class="pay-log-detail">送信先：${escapeHtml(item.to || "")}</span>
             <span class="log-date">${escapeHtml(item.date || "")}</span>
           </div>
         ` : `
@@ -4843,8 +5046,11 @@
     document.getElementById("openParentRewardOnlyBtn").addEventListener("click", openParentRewardSettings);
     document.getElementById("openParentPayTransferBtn").addEventListener("click", openParentPayTransfer);
     document.getElementById("openParentTicketGiftBtn").addEventListener("click", openParentTicketGift);
+    document.getElementById("openParentEmailSettingsBtn").addEventListener("click", openParentEmailSettings);
     document.getElementById("parentRewardBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentPayTransferBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("parentEmailBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("saveParentEmailBtn").addEventListener("click", saveParentEmail);
     document.getElementById("confirmPayTransferBtn").addEventListener("click", executePayTransfer);
     document.getElementById("parentTicketGiftBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("confirmTicketGiftBtn").addEventListener("click", confirmTicketGift);
@@ -4876,6 +5082,7 @@
     document.getElementById("resetDayBtn").addEventListener("click", resetDay);
     document.getElementById("spinBtn").addEventListener("click", spinWheel);
     document.getElementById("clearHistoryBtn").addEventListener("click", clearHistory);
+    document.getElementById("sendHapichikeCardEmailBtn").addEventListener("click", sendHapichikeCardEmail);
 
     render();
   </script>
