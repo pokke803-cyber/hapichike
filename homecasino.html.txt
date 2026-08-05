@@ -2799,6 +2799,7 @@
   <script>
     const storageKey = "kidsVegasCasino.v1";
     const parentEmailStorageKey = "kidsVegasCasino.parentEmail.v1";
+    const dailyResetHour = 6;
     const defaultTasks = [
       { id: "feed-pet", icon: "🐟", title: "生き物のごはんあつめ", difficulty: "easy", ticketReward: 1, category: "creature", status: "idle", isDefault: true },
       { id: "toy-clean", icon: "🧸", title: "おもちゃの片づけ", difficulty: "easy", ticketReward: 1, category: "cleanup", status: "idle", isDefault: true },
@@ -2954,7 +2955,6 @@
     ])];
     let needsStateSave = false;
     let state = loadState();
-    if (needsStateSave) saveState();
     let activeCategory = "snack";
     let activeTaskCategory = "all";
     let activeStatusTab = "active";
@@ -2980,6 +2980,8 @@
     let bgmFallbackTimer = null;
     let bgmFallbackStep = 0;
     const sfxAudio = {};
+    applyAutomaticDailyReset();
+    if (needsStateSave) saveState();
 
     function loadState() {
       try {
@@ -2995,6 +2997,7 @@
       if (!Array.isArray(saved.transferHistory)) needsStateSave = true;
       if (!Array.isArray(saved.ticketGiftLogs)) needsStateSave = true;
       if (!saved.audioSettings) needsStateSave = true;
+      if (typeof saved.lastDailyResetKey !== "string") needsStateSave = true;
       const parentEmail = loadParentEmail(saved.parentEmail || "");
       return {
         childName: sanitizeName(saved.childName || ""),
@@ -3015,6 +3018,7 @@
           bgmVolume: Math.min(1, Math.max(0, Number(saved.audioSettings?.bgmVolume) || 0.22)),
           sfxVolume: Math.min(1, Math.max(0, Number(saved.audioSettings?.sfxVolume) || 0.62))
         },
+        lastDailyResetKey: typeof saved.lastDailyResetKey === "string" ? saved.lastDailyResetKey : getDailyResetKey(),
         happyChanceCards: Math.max(0, Number(saved.happyChanceCards) || 0),
         points: {
           snack: Number(saved.points?.snack) || 0,
@@ -3181,6 +3185,48 @@
 
     function saveState() {
       localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    function getDailyResetKey(date = new Date()) {
+      const shifted = new Date(date);
+      shifted.setHours(shifted.getHours() - dailyResetHour);
+      const year = shifted.getFullYear();
+      const month = String(shifted.getMonth() + 1).padStart(2, "0");
+      const day = String(shifted.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
+
+    function resetTodayTasksOnly() {
+      state.todayTasks = [];
+      state.tasks = state.tasks.map(task => ({ ...task, status: "idle" }));
+      activeStatusTab = "active";
+    }
+
+    function applyAutomaticDailyReset(notify = false) {
+      const currentResetKey = getDailyResetKey();
+      if (!state.lastDailyResetKey) {
+        state.lastDailyResetKey = currentResetKey;
+        needsStateSave = true;
+        return false;
+      }
+      if (state.lastDailyResetKey === currentResetKey) return false;
+
+      resetTodayTasksOnly();
+      state.lastDailyResetKey = currentResetKey;
+      state.history.unshift({
+        text: `朝${dailyResetHour}時になったので、今日のやることを自動リセットしました。`,
+        type: "dailyReset",
+        date: todayString(),
+        resetKey: currentResetKey
+      });
+      state.history = state.history.slice(0, 40);
+      needsStateSave = true;
+      saveState();
+      if (notify) {
+        render();
+        showToast(`朝${dailyResetHour}時になったので、今日のやることをリセットしました。`);
+      }
+      return true;
     }
 
     function saveParentEmailToStorage(email) {
@@ -4937,9 +4983,8 @@
     function resetDay() {
       const ok = window.confirm("今日のやることリストをリセットしますか？お手伝いリストは消えません。");
       if (!ok) return;
-      state.todayTasks = [];
-      state.tasks = state.tasks.map(task => ({ ...task, status: "idle" }));
-      activeStatusTab = "active";
+      resetTodayTasksOnly();
+      state.lastDailyResetKey = getDailyResetKey();
       addHistory("今日のやることリストをリセットしました。");
       saveState();
       render();
@@ -5273,6 +5318,7 @@
     document.getElementById("clearHistoryBtn").addEventListener("click", clearHistory);
     document.getElementById("sendHapichikeCardEmailBtn").addEventListener("click", sendHapichikeCardEmail);
 
+    setInterval(() => applyAutomaticDailyReset(true), 60000);
     render();
   </script>
 </body>
