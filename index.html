@@ -1139,6 +1139,77 @@
       box-shadow: 0 6px 0 rgba(239, 35, 60, .26);
     }
 
+    .icon-picker-panel {
+      display: grid;
+      gap: 12px;
+      padding: 12px;
+      border: 3px solid #fff;
+      border-radius: 20px;
+      background:
+        radial-gradient(circle at 92% 14%, rgba(255, 209, 102, .36), transparent 22%),
+        linear-gradient(135deg, #fff, #fff8d6 52%, #ffe4f3);
+      box-shadow: 0 7px 0 rgba(255, 143, 171, .15);
+    }
+
+    .selected-icon-preview {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #23324d;
+      font-weight: 900;
+    }
+
+    .selected-icon-preview strong {
+      width: 44px;
+      height: 44px;
+      display: inline-grid;
+      place-items: center;
+      border: 3px solid #ffd166;
+      border-radius: 15px;
+      background: #fff;
+      font-size: 1.6rem;
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .1);
+    }
+
+    .icon-picker-section {
+      display: grid;
+      gap: 7px;
+    }
+
+    .icon-picker-label {
+      color: #475569;
+      font-weight: 900;
+      font-size: .92rem;
+    }
+
+    .icon-choice-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .icon-choice {
+      width: 42px;
+      height: 42px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #fff, #dff7ff);
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .1);
+      font-size: 1.35rem;
+      cursor: pointer;
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+
+    .icon-choice:hover {
+      transform: translateY(-1px);
+    }
+
+    .icon-choice.active {
+      border-color: #ffd166;
+      background: linear-gradient(135deg, #ffd166, #ff8fab);
+      box-shadow: 0 6px 0 rgba(239, 35, 60, .24), 0 0 0 3px rgba(255, 209, 102, .3);
+    }
+
     .ticket-gift-summary {
       padding: 14px;
       border: 3px solid #fff;
@@ -2708,7 +2779,19 @@
         </label>
         <label>
           アイコン
-          <input id="parentTaskIconInput" maxlength="4" autocomplete="off" placeholder="🎟️">
+          <div class="icon-picker-panel">
+            <div class="selected-icon-preview">現在のアイコン：<strong id="selectedTaskIconPreview">🎟️</strong></div>
+            <div class="icon-picker-section">
+              <span class="icon-picker-label">おすすめ：</span>
+              <div class="icon-choice-row" id="recommendedIconChoices"></div>
+            </div>
+            <div class="icon-picker-section">
+              <span class="icon-picker-label">ほかのアイコン：</span>
+              <div class="icon-choice-row" id="allIconChoices"></div>
+            </div>
+          </div>
+          <span class="icon-picker-label">自分で入力</span>
+          <input id="parentTaskIconInput" maxlength="8" autocomplete="off" placeholder="🎟️">
         </label>
         <label>
           カテゴリー
@@ -2881,7 +2964,30 @@
       error: "public/audio/sfx-error.mp3"
     };
 
-    const icons = ["🧹", "📚", "🪥", "🥗", "😊", "🧺", "🌱", "🧽", "📝", "🎵"];
+    const categoryIconSuggestions = {
+      creature: ["🐟", "🐶", "🐱", "🐰", "🐢", "🐹", "🐦", "🥕", "🦴"],
+      cooking: ["🍽️", "🍳", "🥄", "🍚", "🧽", "🥣", "🧂", "🥬"],
+      laundry: ["🧺", "👕", "🧦", "🧼", "🫧", "🧴"],
+      cleanup: ["🧸", "🧹", "📦", "🗑️", "✨", "🚪", "🛏️", "📚"],
+      outside: ["🌱", "🌼", "🪴", "🚲", "🧹", "🪣", "☀️", "🍂"],
+      common: ["🎟️", "⭐", "💪", "✨", "🏆", "🎁"]
+    };
+    const titleIconRules = [
+      { keywords: ["生き物", "魚", "えさ", "ごはん", "ペット"], icons: ["🐟", "🐶", "🐱", "🐢", "🥕"] },
+      { keywords: ["食器", "皿", "おさら", "洗い", "キッチン"], icons: ["🍽️", "🧽", "🫧"] },
+      { keywords: ["料理", "ごはん", "配膳", "テーブル"], icons: ["🍳", "🍚", "🥄", "🍽️"] },
+      { keywords: ["洗たく", "洗濯", "服", "くつ下", "たたむ"], icons: ["🧺", "👕", "🧦"] },
+      { keywords: ["片づけ", "片付け", "おもちゃ", "部屋"], icons: ["🧸", "📦", "✨"] },
+      { keywords: ["そうじ", "掃除", "ほうき", "ごみ"], icons: ["🧹", "🗑️", "✨"] },
+      { keywords: ["草", "水やり", "花", "外", "玄関"], icons: ["🌱", "🌼", "🪴", "🚪"] },
+      { keywords: ["勉強", "本", "宿題"], icons: ["📚", "✏️"] },
+      { keywords: ["歯", "はみがき"], icons: ["🪥"] },
+      { keywords: ["風呂", "おふろ"], icons: ["🚿"] }
+    ];
+    const allTaskIconChoices = [...new Set([
+      ...Object.values(categoryIconSuggestions).flat(),
+      "🍽️", "🧽", "🥄", "🐟", "🧸", "🧹", "🧺", "🌱", "📚", "✏️", "🪥", "🚿", "🛏️", "🗑️", "🍳", "📝", "🎵"
+    ])];
     let needsStateSave = false;
     let state = loadState();
     if (needsStateSave) saveState();
@@ -2899,6 +3005,8 @@
     let parentEditingTaskId = null;
     let parentDeleteTaskId = null;
     let parentTaskRewardDraft = 1;
+    let parentTaskIconDraft = "🎟️";
+    let parentTaskIconManuallySelected = false;
     let ticketGiftDraftAmount = 1;
     let ticketGiftPending = null;
     let usePayAmount = { sweets: "", toy: "", game: "" };
@@ -4365,18 +4473,96 @@
       });
     }
 
+    function pickSingleIcon(value) {
+      const trimmed = String(value || "").trim();
+      if (!trimmed) return "";
+      if (typeof Intl !== "undefined" && Intl.Segmenter) {
+        const segmenter = new Intl.Segmenter("ja", { granularity: "grapheme" });
+        return [...segmenter.segment(trimmed)][0]?.segment || "";
+      }
+      return Array.from(trimmed)[0] || "";
+    }
+
+    function getRecommendedIcons(title, category) {
+      const normalizedTitle = String(title || "");
+      const titleMatches = titleIconRules
+        .filter(rule => rule.keywords.some(keyword => normalizedTitle.includes(keyword)))
+        .flatMap(rule => rule.icons);
+      return [...new Set([
+        ...titleMatches,
+        ...(categoryIconSuggestions[category] || []),
+        ...categoryIconSuggestions.common
+      ])].slice(0, 12);
+    }
+
+    function setParentTaskIconDraft(icon, manual = true) {
+      parentTaskIconDraft = pickSingleIcon(icon) || "🎟️";
+      parentTaskIconManuallySelected = manual;
+      document.getElementById("parentTaskIconInput").value = parentTaskIconDraft;
+      renderParentTaskIconPicker();
+    }
+
+    function renderParentTaskIconPicker() {
+      const title = document.getElementById("parentTaskTitleInput").value;
+      const category = document.getElementById("parentTaskCategoryInput").value;
+      const recommendedIcons = getRecommendedIcons(title, category);
+      const selectedIcon = pickSingleIcon(parentTaskIconDraft) || "🎟️";
+      document.getElementById("selectedTaskIconPreview").textContent = selectedIcon;
+      document.getElementById("parentTaskIconInput").value = selectedIcon;
+
+      const renderChoices = (targetId, icons) => {
+        const row = document.getElementById(targetId);
+        row.innerHTML = icons.map((icon, index) => `
+          <button class="icon-choice ${icon === selectedIcon ? "active" : ""}" type="button" data-icon-index="${index}" aria-label="${escapeHtml(icon)}を選ぶ">${escapeHtml(icon)}</button>
+        `).join("");
+        row.querySelectorAll("[data-icon-index]").forEach(button => {
+          button.addEventListener("click", () => setParentTaskIconDraft(icons[Number(button.dataset.iconIndex)], true));
+        });
+      };
+
+      renderChoices("recommendedIconChoices", recommendedIcons);
+      renderChoices("allIconChoices", allTaskIconChoices);
+    }
+
+    function handleParentTaskIconSuggestionChange() {
+      if (!parentTaskIconManuallySelected) {
+        const title = document.getElementById("parentTaskTitleInput").value;
+        const category = document.getElementById("parentTaskCategoryInput").value;
+        parentTaskIconDraft = getRecommendedIcons(title, category)[0] || "🎟️";
+      }
+      renderParentTaskIconPicker();
+    }
+
+    function handleParentTaskIconInput() {
+      const icon = pickSingleIcon(document.getElementById("parentTaskIconInput").value);
+      if (icon) {
+        parentTaskIconDraft = icon;
+        parentTaskIconManuallySelected = true;
+      } else {
+        parentTaskIconManuallySelected = false;
+        parentTaskIconDraft = getRecommendedIcons(
+          document.getElementById("parentTaskTitleInput").value,
+          document.getElementById("parentTaskCategoryInput").value
+        )[0] || "🎟️";
+      }
+      renderParentTaskIconPicker();
+    }
+
     function openParentTaskForm(taskId = null) {
       const task = state.tasks.find(item => item.id === taskId);
       parentEditingTaskId = task ? task.id : null;
       parentTaskRewardDraft = Number(task?.ticketReward) || 1;
       document.getElementById("parentTaskFormLead").textContent = task ? "お手伝いを編集します。" : "新しいお手伝いを追加します。";
       document.getElementById("parentTaskTitleInput").value = task?.title || "";
-      document.getElementById("parentTaskIconInput").value = task?.icon || "🎟️";
       document.getElementById("parentTaskCategoryInput").value = task?.category || "cleanup";
       document.getElementById("parentTaskDifficultyInput").value = task?.difficulty || "easy";
+      parentTaskIconManuallySelected = Boolean(task?.icon);
+      parentTaskIconDraft = task?.icon ? pickSingleIcon(task.icon) : getRecommendedIcons("", "cleanup")[0] || "🎟️";
+      document.getElementById("parentTaskIconInput").value = parentTaskIconDraft;
       document.getElementById("parentTaskFormError").textContent = "";
       showParentPanel("parentTaskFormPanel");
       renderParentTaskRewardChoices();
+      renderParentTaskIconPicker();
       setTimeout(() => document.getElementById("parentTaskTitleInput").focus(), 0);
     }
 
@@ -4396,7 +4582,7 @@
     function saveParentTaskForm(event) {
       event.preventDefault();
       const title = document.getElementById("parentTaskTitleInput").value.trim();
-      const icon = document.getElementById("parentTaskIconInput").value.trim() || "🎟️";
+      const icon = pickSingleIcon(parentTaskIconDraft || document.getElementById("parentTaskIconInput").value) || "🎟️";
       const category = document.getElementById("parentTaskCategoryInput").value;
       const difficulty = document.getElementById("parentTaskDifficultyInput").value;
       const reward = Number(parentTaskRewardDraft);
@@ -5134,6 +5320,9 @@
     document.getElementById("addParentTaskBtn").addEventListener("click", () => openParentTaskForm());
     document.getElementById("parentTaskFormPanel").addEventListener("submit", saveParentTaskForm);
     document.getElementById("cancelParentTaskFormBtn").addEventListener("click", openParentTaskEditPage);
+    document.getElementById("parentTaskTitleInput").addEventListener("input", handleParentTaskIconSuggestionChange);
+    document.getElementById("parentTaskCategoryInput").addEventListener("change", handleParentTaskIconSuggestionChange);
+    document.getElementById("parentTaskIconInput").addEventListener("input", handleParentTaskIconInput);
     document.getElementById("cancelParentDeleteBtn").addEventListener("click", openParentTaskEditPage);
     document.getElementById("confirmParentDeleteBtn").addEventListener("click", confirmParentDelete);
     document.getElementById("saveParentRewardsBtn").addEventListener("click", saveParentRewards);
