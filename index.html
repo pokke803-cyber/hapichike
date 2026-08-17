@@ -460,7 +460,7 @@
 
     .status-bar {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -486,6 +486,36 @@
       font-size: clamp(1.35rem, 4vw, 2.1rem);
       font-weight: 900;
       line-height: 1;
+    }
+
+    .meter-help {
+      margin-top: 6px;
+      color: #64748b;
+      font-size: .78rem;
+      font-weight: 900;
+      line-height: 1.25;
+    }
+
+    .star-exchange-button {
+      width: 100%;
+      min-height: 32px;
+      margin-top: 8px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffd166, #ff8fab);
+      color: #fff;
+      font-weight: 900;
+      box-shadow: 0 5px 0 rgba(239, 35, 60, .22);
+      cursor: pointer;
+      text-shadow: 0 1px 0 rgba(39, 48, 67, .24);
+    }
+
+    .star-exchange-button:disabled {
+      cursor: not-allowed;
+      background: linear-gradient(135deg, #e2e8f0, #f8fafc);
+      color: #94a3b8;
+      box-shadow: 0 5px 0 rgba(100, 116, 139, .16);
+      text-shadow: none;
     }
 
     .audio-meter {
@@ -801,6 +831,12 @@
       font-weight: 900;
     }
 
+    .ticket-reward.star {
+      background: linear-gradient(135deg, #fff8d6, #ffe4f3);
+      border-color: rgba(255, 209, 102, .86);
+      color: #9a5b00;
+    }
+
     .ticket-icons {
       letter-spacing: -2px;
       white-space: nowrap;
@@ -1109,6 +1145,30 @@
       color: #fff;
       text-shadow: 0 2px 0 rgba(39, 48, 67, .3);
       box-shadow: 0 6px 0 rgba(239, 35, 60, .26);
+    }
+
+    .reward-type-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .reward-type-choice {
+      min-height: 44px;
+      border: 3px solid #fff;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #fff, #dff7ff);
+      color: #273043;
+      font-weight: 900;
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .1);
+      cursor: pointer;
+    }
+
+    .reward-type-choice.active {
+      background: linear-gradient(135deg, #ffd166, #ff8fab);
+      color: #fff;
+      text-shadow: 0 2px 0 rgba(39, 48, 67, .3);
+      box-shadow: 0 6px 0 rgba(239, 35, 60, .24);
     }
 
     .icon-picker-panel {
@@ -2505,6 +2565,12 @@
           <div class="meter-value" id="coinCount">0</div>
         </div>
         <div class="meter">
+          <div class="meter-label">⭐ スターコイン</div>
+          <div class="meter-value" id="starCoinCount">0</div>
+          <div class="meter-help" id="starCoinHelp">あと5枚でチケット！</div>
+          <button class="star-exchange-button" id="exchangeStarCoinsBtn" type="button" disabled>チケットに交換！</button>
+        </div>
+        <div class="meter">
           <div class="meter-label">今日のクリア</div>
           <div class="meter-value"><span id="doneCount">0</span> / <span id="taskTotal">0</span></div>
         </div>
@@ -2551,6 +2617,7 @@
         </div>
         <div class="roulette-dashboard">
           <div class="roulette-stat">🎟️ 所持チケット<span id="ticketCountDisplay">0</span></div>
+          <div class="roulette-stat">⭐ スターコイン<span id="rouletteStarCoinDisplay">0枚</span></div>
           <div class="roulette-stat">🎯 選択中<span id="activeCategoryDisplay">お菓子</span></div>
           <div class="roulette-stat">🔥 BET<span id="activeBetDisplay">1</span></div>
           <div class="roulette-stat">💖 ハピチャンカード<span id="happyChanceDisplay">0枚</span></div>
@@ -2686,6 +2753,7 @@
       </form>
       <div class="info-modal-body parent-panel hidden" id="parentMenuPanel">
         <p class="parent-note">おうちの人だけが使う管理メニューです。子ども画面には追加・編集・削除ボタンは表示されません。</p>
+        <div class="ticket-gift-summary">⭐ スターコイン：<strong id="parentStarCoinDisplay">0枚</strong></div>
         <div class="parent-menu-grid">
           <button class="parent-menu-button" type="button" id="openParentTaskEditBtn">
             <strong>お手伝い編集</strong>
@@ -2713,7 +2781,7 @@
         </div>
       </div>
       <div class="info-modal-body parent-panel hidden" id="parentRewardPanel">
-        <p class="parent-note">お手伝いでもらえるチケット枚数だけを変更できます。名前・状態・カテゴリーはここでは変わりません。</p>
+        <p class="parent-note">お手伝いでもらえるチケット・スターコインの枚数だけを変更できます。名前・状態・カテゴリーはここでは変わりません。</p>
         <div class="parent-task-list" id="parentTaskList"></div>
         <div class="edit-error" id="parentRewardMessage" role="status"></div>
         <div class="parent-save-row">
@@ -2831,7 +2899,11 @@
           </select>
         </label>
         <div>
-          <strong>もらえるTICKET</strong>
+          <strong>報酬タイプ</strong>
+          <div class="reward-type-row" id="parentTaskRewardTypeChoices"></div>
+        </div>
+        <div>
+          <strong id="parentTaskRewardLabel">もらえるTICKET</strong>
           <div class="ticket-choice-row" id="parentTaskRewardChoices"></div>
         </div>
         <div class="edit-error" id="parentTaskFormError" role="alert"></div>
@@ -3024,6 +3096,8 @@
     let parentEditingTaskId = null;
     let parentDeleteTaskId = null;
     let parentTaskRewardDraft = 1;
+    let parentTaskRewardTypeDraft = "ticket";
+    let parentTaskStarCoinRewardDraft = 1;
     let parentTaskIconDraft = "🎟️";
     let parentTaskIconManuallySelected = false;
     let ticketGiftDraftAmount = 1;
@@ -3053,6 +3127,7 @@
       if (!Array.isArray(saved.ticketGiftLogs)) needsStateSave = true;
       if (!saved.audioSettings) needsStateSave = true;
       if (typeof saved.lastDailyResetKey !== "string") needsStateSave = true;
+      if (typeof saved.starCoins !== "number") needsStateSave = true;
       const parentEmail = loadParentEmail(saved.parentEmail || "");
       return {
         childName: sanitizeName(saved.childName || ""),
@@ -3074,6 +3149,7 @@
           sfxVolume: Math.min(1, Math.max(0, Number(saved.audioSettings?.sfxVolume) || 0.62))
         },
         lastDailyResetKey: typeof saved.lastDailyResetKey === "string" ? saved.lastDailyResetKey : getDailyResetKey(),
+        starCoins: Math.max(0, Number(saved.starCoins) || 0),
         happyChanceCards: Math.max(0, Number(saved.happyChanceCards) || 0),
         points: {
           snack: Number(saved.points?.snack) || 0,
@@ -3102,6 +3178,8 @@
             startedAt: item.startedAt || "",
             completedAt: item.completedAt || "",
             ticketReward: Math.min(5, Math.max(1, Number(item.ticketReward) || Number(tasks.find(task => task.id === item.taskId)?.ticketReward) || 1)),
+            rewardType: normalizeRewardType(item.rewardType || tasks.find(task => task.id === item.taskId)?.rewardType),
+            starCoinReward: Math.min(5, Math.max(1, Number(item.starCoinReward) || Number(tasks.find(task => task.id === item.taskId)?.starCoinReward) || 1)),
             ticketGranted: Boolean(item.ticketGranted)
           }));
       }
@@ -3116,6 +3194,8 @@
             startedAt: "",
             completedAt: status === "done" ? todayString() : "",
             ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+            rewardType: normalizeRewardType(task.rewardType),
+            starCoinReward: Math.min(5, Math.max(1, Number(task.starCoinReward) || 1)),
             ticketGranted: status === "done"
           };
         });
@@ -3152,6 +3232,8 @@
           title: task.title,
           difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
           ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+          rewardType: normalizeRewardType(task.rewardType),
+          starCoinReward: Math.min(5, Math.max(1, Number(task.starCoinReward) || 1)),
           category,
           status: normalizeTaskStatus(task.status, task.done),
           isDefault: Boolean(task.isDefault)
@@ -3166,6 +3248,8 @@
         title: legacyTitle,
         difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
         ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+        rewardType: normalizeRewardType(task.rewardType),
+        starCoinReward: Math.min(5, Math.max(1, Number(task.starCoinReward) || 1)),
         category: normalizeCategory(task.category, legacyTitle, task.icon),
         status: normalizeTaskStatus(task.status, task.done),
         isDefault: Boolean(task.isDefault)
@@ -3176,6 +3260,10 @@
       if (doneFlag || ["done", "completed", "finished"].includes(status)) return "done";
       if (["inProgress", "doing"].includes(status)) return "inProgress";
       return "idle";
+    }
+
+    function normalizeRewardType(rewardType) {
+      return rewardType === "starCoin" ? "starCoin" : "ticket";
     }
 
     function isTaskCompleted(task) {
@@ -3215,6 +3303,8 @@
           category: normalizeCategory(item.category, title, item.icon),
           difficulty: ["easy", "normal", "hard"].includes(item.difficulty) ? item.difficulty : "easy",
           ticketReward: Math.min(5, Math.max(1, Number(item.ticketReward) || 1)),
+          rewardType: normalizeRewardType(item.rewardType),
+          starCoinReward: Math.min(5, Math.max(1, Number(item.starCoinReward) || 1)),
           lastUsedAt: item.lastUsedAt || item.date || "",
           completedCount: Math.max(0, Number(item.completedCount) || (item.status === "done" || item.done ? 1 : 0))
         };
@@ -3516,6 +3606,8 @@
         category,
         difficulty: ["easy", "normal", "hard"].includes(task.difficulty) ? task.difficulty : "easy",
         ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+        rewardType: normalizeRewardType(task.rewardType),
+        starCoinReward: Math.min(5, Math.max(1, Number(task.starCoinReward) || 1)),
         lastUsedAt: nowIsoString(),
         completedCount: 0
       };
@@ -3556,7 +3648,13 @@
     function updateStats() {
       const done = state.todayTasks.filter(item => isTaskCompleted(item)).length;
       document.getElementById("coinCount").textContent = state.coins;
+      document.getElementById("starCoinCount").textContent = state.starCoins;
+      document.getElementById("starCoinHelp").textContent = state.starCoins >= 5
+        ? "チケット1枚と交換できるよ！"
+        : `あと${5 - state.starCoins}枚でチケット！`;
+      document.getElementById("exchangeStarCoinsBtn").disabled = state.starCoins < 5;
       document.getElementById("ticketCountDisplay").textContent = state.coins;
+      document.getElementById("rouletteStarCoinDisplay").textContent = `${state.starCoins}枚`;
       document.getElementById("activeCategoryDisplay").textContent = categories[activeCategory].label;
       document.getElementById("activeBetDisplay").textContent = activeBet;
       document.getElementById("happyChanceDisplay").textContent = `${state.happyChanceCards}枚`;
@@ -3740,10 +3838,7 @@
                 </div>
               </div>
             </div>
-            <div class="ticket-reward">
-              <span class="ticket-icons">${renderTicketIcons(task.ticketReward)}</span>
-              <span>チケット ${task.ticketReward}枚</span>
-            </div>
+            ${renderTaskReward(task)}
             <div class="task-actions">
               <button class="task-action start" data-action="add-today" ${added ? "disabled" : ""}>${added ? "今日のリストに入ってるよ" : "やることに追加"}</button>
             </div>
@@ -3776,7 +3871,7 @@
             ${todayItems.map(({ task, today }) => `
               <div class="completed-row">
                 <span class="completed-row-title">✅ ${escapeHtml(task.title)}</span>
-                <span class="completed-row-ticket">🎟️ ${Number(today.ticketReward || task.ticketReward) || 1}枚</span>
+                <span class="completed-row-ticket">${getTaskRewardType(today) === "starCoin" ? "⭐" : "🎟️"} ${getTaskRewardAmount(today)}枚</span>
               </div>
             `).join("")}
           </div>
@@ -3798,10 +3893,7 @@
               </div>
             </div>
           </div>
-          <div class="ticket-reward">
-            <span class="ticket-icons">${renderTicketIcons(task.ticketReward)}</span>
-            <span>チケット ${task.ticketReward}枚</span>
-          </div>
+          ${renderTaskReward(task)}
           <div class="task-actions">
             <button class="task-action complete" data-action="complete">お手伝い完了！</button>
             <button class="task-action cancel" data-action="cancel">キャンセル</button>
@@ -3878,7 +3970,7 @@
           item.icon,
           getTaskCategoryLabel(item.category),
           difficultyLabels[item.difficulty],
-          `${item.ticketReward}枚`
+          getTaskRewardLabel(item)
         ].join(" ").toLowerCase();
         return searchable.includes(query);
       });
@@ -3898,7 +3990,7 @@
               <div class="history-result-meta">
                 <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(item.category))}</span>
                 <span class="task-badge ${item.difficulty}">${difficultyLabels[item.difficulty]}</span>
-                <span class="status-badge idle">🎫 ${Number(item.ticketReward) || 1}枚</span>
+                <span class="status-badge idle">${getTaskRewardType(item) === "starCoin" ? "⭐" : "🎫"} ${getTaskRewardAmount(item)}枚</span>
                 <span class="status-badge done">回数 ${Number(item.completedCount) || 0}</span>
               </div>
             </div>
@@ -3936,6 +4028,8 @@
           title: item.title,
           difficulty: item.difficulty,
           ticketReward: Math.min(5, Math.max(1, Number(item.ticketReward) || 1)),
+          rewardType: getTaskRewardType(item),
+          starCoinReward: Math.min(5, Math.max(1, Number(item.starCoinReward) || 1)),
           category: normalizeCategory(item.category, item.title, item.icon),
           status: "idle",
           isDefault: false
@@ -3962,6 +4056,8 @@
         startedAt: "",
         completedAt: "",
         ticketReward: Math.min(5, Math.max(1, Number(task.ticketReward) || 1)),
+        rewardType: getTaskRewardType(task),
+        starCoinReward: Math.min(5, Math.max(1, Number(task.starCoinReward) || 1)),
         ticketGranted: false
       });
       upsertTaskHistory(task);
@@ -4035,7 +4131,7 @@
               <div class="task-meta">
                 <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
                 <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
-                <span class="status-badge idle">🎫 ${Number(task.ticketReward) || 1}枚</span>
+                <span class="status-badge idle">${getTaskRewardType(task) === "starCoin" ? "⭐" : "🎫"} ${getTaskRewardAmount(task)}枚</span>
                 ${added ? `<span class="status-badge done">追加済み</span>` : ""}
               </div>
             </div>
@@ -4145,7 +4241,8 @@
       }
 
       list.innerHTML = state.tasks.map(task => {
-        const selectedReward = Number(parentRewardDraft[task.id] || task.ticketReward || 1);
+        const isStar = getTaskRewardType(task) === "starCoin";
+        const selectedReward = Number(parentRewardDraft[task.id] || getTaskRewardAmount(task));
         return `
           <article class="parent-task-card">
             <div class="parent-task-head">
@@ -4155,11 +4252,11 @@
                 <div class="task-meta">
                   <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
                   <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
-                  <span class="status-badge idle">今は 🎫 ${selectedReward}枚</span>
+                  <span class="status-badge idle">今は ${isStar ? "⭐" : "🎫"} ${selectedReward}枚</span>
                 </div>
               </div>
             </div>
-            <div class="ticket-choice-row" aria-label="${escapeHtml(task.title)}のチケット枚数">
+            <div class="ticket-choice-row" aria-label="${escapeHtml(task.title)}の報酬枚数">
               ${[1, 2, 3, 4, 5].map(count => `
                 <button class="ticket-choice ${selectedReward === count ? "active" : ""}" type="button" data-parent-task="${escapeHtml(task.id)}" data-parent-reward="${count}">${count}枚</button>
               `).join("")}
@@ -4189,8 +4286,13 @@
         const task = state.tasks.find(item => item.id === taskId);
         const nextReward = Number(reward);
         if (!task || !Number.isInteger(nextReward) || nextReward < 1 || nextReward > 5) return;
-        if (task.ticketReward === nextReward) return;
-        task.ticketReward = nextReward;
+        if (getTaskRewardType(task) === "starCoin") {
+          if (task.starCoinReward === nextReward) return;
+          task.starCoinReward = nextReward;
+        } else {
+          if (task.ticketReward === nextReward) return;
+          task.ticketReward = nextReward;
+        }
         upsertTaskHistory(task);
         changed += 1;
       });
@@ -4209,6 +4311,8 @@
     }
 
     function openParentMenu() {
+      const display = document.getElementById("parentStarCoinDisplay");
+      if (display) display.textContent = `${state.starCoins}枚`;
       showParentPanel("parentMenuPanel");
     }
 
@@ -4484,7 +4588,7 @@
               <div class="task-meta">
                 <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
                 <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
-                <span class="status-badge idle">🎫 ${Number(task.ticketReward) || 1}枚</span>
+                <span class="status-badge idle">${getTaskRewardType(task) === "starCoin" ? "⭐" : "🎫"} ${getTaskRewardAmount(task)}枚</span>
               </div>
             </div>
           </div>
@@ -4581,7 +4685,9 @@
     function openParentTaskForm(taskId = null) {
       const task = state.tasks.find(item => item.id === taskId);
       parentEditingTaskId = task ? task.id : null;
+      parentTaskRewardTypeDraft = getTaskRewardType(task);
       parentTaskRewardDraft = Number(task?.ticketReward) || 1;
+      parentTaskStarCoinRewardDraft = Math.min(5, Math.max(1, Number(task?.starCoinReward) || 1));
       document.getElementById("parentTaskFormLead").textContent = task ? "お手伝いを編集します。" : "新しいお手伝いを追加します。";
       document.getElementById("parentTaskTitleInput").value = task?.title || "";
       document.getElementById("parentTaskCategoryInput").value = task?.category || "cleanup";
@@ -4591,6 +4697,7 @@
       document.getElementById("parentTaskIconInput").value = parentTaskIconDraft;
       document.getElementById("parentTaskFormError").textContent = "";
       showParentPanel("parentTaskFormPanel");
+      renderParentTaskRewardTypeChoices();
       renderParentTaskRewardChoices();
       renderParentTaskIconPicker();
       setTimeout(() => document.getElementById("parentTaskTitleInput").focus(), 0);
@@ -4598,12 +4705,37 @@
 
     function renderParentTaskRewardChoices() {
       const row = document.getElementById("parentTaskRewardChoices");
+      const isStar = parentTaskRewardTypeDraft === "starCoin";
+      const activeReward = isStar ? parentTaskStarCoinRewardDraft : parentTaskRewardDraft;
+      document.getElementById("parentTaskRewardLabel").textContent = isStar ? "もらえるスターコイン" : "もらえるTICKET";
       row.innerHTML = [1, 2, 3, 4, 5].map(count => `
-        <button class="ticket-choice ${parentTaskRewardDraft === count ? "active" : ""}" type="button" data-parent-task-form-reward="${count}">${count}枚</button>
+        <button class="ticket-choice ${activeReward === count ? "active" : ""}" type="button" data-parent-task-form-reward="${count}">${count}枚</button>
       `).join("");
       row.querySelectorAll("[data-parent-task-form-reward]").forEach(button => {
         button.addEventListener("click", () => {
-          parentTaskRewardDraft = Number(button.dataset.parentTaskFormReward);
+          if (parentTaskRewardTypeDraft === "starCoin") {
+            parentTaskStarCoinRewardDraft = Number(button.dataset.parentTaskFormReward);
+          } else {
+            parentTaskRewardDraft = Number(button.dataset.parentTaskFormReward);
+          }
+          renderParentTaskRewardChoices();
+        });
+      });
+    }
+
+    function renderParentTaskRewardTypeChoices() {
+      const row = document.getElementById("parentTaskRewardTypeChoices");
+      const choices = [
+        { id: "ticket", label: "🎟️ チケット" },
+        { id: "starCoin", label: "⭐ スターコイン" }
+      ];
+      row.innerHTML = choices.map(choice => `
+        <button class="reward-type-choice ${parentTaskRewardTypeDraft === choice.id ? "active" : ""}" type="button" data-parent-task-reward-type="${choice.id}">${choice.label}</button>
+      `).join("");
+      row.querySelectorAll("[data-parent-task-reward-type]").forEach(button => {
+        button.addEventListener("click", () => {
+          parentTaskRewardTypeDraft = normalizeRewardType(button.dataset.parentTaskRewardType);
+          renderParentTaskRewardTypeChoices();
           renderParentTaskRewardChoices();
         });
       });
@@ -4615,7 +4747,9 @@
       const icon = pickSingleIcon(parentTaskIconDraft || document.getElementById("parentTaskIconInput").value) || "🎟️";
       const category = document.getElementById("parentTaskCategoryInput").value;
       const difficulty = document.getElementById("parentTaskDifficultyInput").value;
+      const rewardType = normalizeRewardType(parentTaskRewardTypeDraft);
       const reward = Number(parentTaskRewardDraft);
+      const starReward = Number(parentTaskStarCoinRewardDraft);
       const error = document.getElementById("parentTaskFormError");
 
       if (!title) {
@@ -4634,6 +4768,10 @@
         error.textContent = "TICKET枚数は1〜5枚で選んでください";
         return;
       }
+      if (!Number.isInteger(starReward) || starReward < 1 || starReward > 5) {
+        error.textContent = "スターコイン枚数は1〜5枚で選んでください";
+        return;
+      }
 
       const existing = state.tasks.find(task => task.id === parentEditingTaskId);
       if (existing) {
@@ -4641,7 +4779,9 @@
         existing.icon = icon;
         existing.category = category;
         existing.difficulty = difficulty;
+        existing.rewardType = rewardType;
         existing.ticketReward = reward;
+        existing.starCoinReward = starReward;
         upsertTaskHistory(existing);
         showToast("お手伝いを保存しました。");
       } else {
@@ -4651,7 +4791,9 @@
           icon,
           category,
           difficulty,
+          rewardType,
           ticketReward: reward,
+          starCoinReward: starReward,
           status: "idle",
           isDefault: false
         };
@@ -4696,6 +4838,38 @@
 
     function renderTicketIcons(count) {
       return "🎫".repeat(Math.min(5, Math.max(1, Number(count) || 1)));
+    }
+
+    function getTaskRewardType(task) {
+      return normalizeRewardType(task?.rewardType);
+    }
+
+    function getTaskRewardAmount(task) {
+      return getTaskRewardType(task) === "starCoin"
+        ? Math.min(5, Math.max(1, Number(task?.starCoinReward) || 1))
+        : Math.min(5, Math.max(1, Number(task?.ticketReward) || 1));
+    }
+
+    function getTaskRewardLabel(task) {
+      const amount = getTaskRewardAmount(task);
+      return getTaskRewardType(task) === "starCoin"
+        ? `スターコイン ${amount}枚`
+        : `チケット ${amount}枚`;
+    }
+
+    function getTaskRewardIconText(task) {
+      const amount = getTaskRewardAmount(task);
+      return getTaskRewardType(task) === "starCoin" ? "⭐".repeat(amount) : renderTicketIcons(amount);
+    }
+
+    function renderTaskReward(task) {
+      const isStar = getTaskRewardType(task) === "starCoin";
+      return `
+        <div class="ticket-reward ${isStar ? "star" : ""}">
+          <span class="ticket-icons">${getTaskRewardIconText(task)}</span>
+          <span>${getTaskRewardLabel(task)}</span>
+        </div>
+      `;
     }
 
     function renderBadges(done) {
@@ -4765,6 +4939,7 @@
         `🤖 ToyPAY：${Number(state.points.toy) || 0}P`,
         `🎮 GamePAY：${Number(state.points.game) || 0}P`,
         `🎟️ チケット：${Number(state.coins) || 0}枚`,
+        `⭐ スターコイン：${Number(state.starCoins) || 0}枚`,
         `💖 ハピチャンカード：${Number(state.happyChanceCards) || 0}枚`,
         "",
         `作成：${todayString()}`,
@@ -4821,17 +4996,22 @@
         `).join("")
         : `<div class="log-item">PAY交換ログはまだありません。</div>`;
       const taskCompletedLogs = state.history.filter(item =>
-        item.type === "taskCompleted" || /^「.+」を完了。チケット \+\d+/.test(item.text || "")
+        item.type === "taskCompleted" ||
+        item.type === "taskCompletedStarCoin" ||
+        /^「.+」を完了。(チケット|スターコイン) \+\d+/.test(item.text || "")
       );
       const taskCompletedHtml = taskCompletedLogs.length
         ? taskCompletedLogs.map(item => {
-          const legacyMatch = String(item.text || "").match(/^「(.+)」を完了。チケット \+(\d+)/);
+          const legacyMatch = String(item.text || "").match(/^「(.+)」を完了。(チケット|スターコイン) \+(\d+)/);
           const title = item.taskTitle || legacyMatch?.[1] || item.text || "お手伝い";
-          const reward = Number(item.ticketReward || legacyMatch?.[2]) || 1;
+          const rewardType = normalizeRewardType(item.rewardType || (legacyMatch?.[2] === "スターコイン" ? "starCoin" : "ticket"));
+          const reward = rewardType === "starCoin"
+            ? Number(item.starCoinReward || legacyMatch?.[3]) || 1
+            : Number(item.ticketReward || legacyMatch?.[3]) || 1;
           return `
             <div class="log-item task-complete-log">
               ✅ 「${escapeHtml(title)}」を完了
-              <span class="task-complete-ticket">チケット +${reward}</span>
+              <span class="task-complete-ticket">${rewardType === "starCoin" ? "スターコイン" : "チケット"} +${reward}</span>
               <span class="log-date">${escapeHtml(item.date || "")}</span>
             </div>
           `;
@@ -5002,14 +5182,25 @@
       today.status = "done";
       today.completedAt = todayString();
       today.ticketReward = Math.min(5, Math.max(1, Number(task.ticketReward) || 1));
+      today.rewardType = getTaskRewardType(task);
+      today.starCoinReward = Math.min(5, Math.max(1, Number(task.starCoinReward) || 1));
       if (!today.ticketGranted) {
-        state.coins += today.ticketReward;
+        if (today.rewardType === "starCoin") {
+          state.starCoins += today.starCoinReward;
+        } else {
+          state.coins += today.ticketReward;
+        }
         today.ticketGranted = true;
       }
       upsertTaskHistory(task, { completed: true });
-      addHistory(`「${task.title}」を完了。チケット +${today.ticketReward}`, "taskCompleted", {
+      const rewardText = today.rewardType === "starCoin"
+        ? `スターコイン +${today.starCoinReward}`
+        : `チケット +${today.ticketReward}`;
+      addHistory(`「${task.title}」を完了。${rewardText}`, today.rewardType === "starCoin" ? "taskCompletedStarCoin" : "taskCompleted", {
         taskTitle: task.title,
+        rewardType: today.rewardType,
         ticketReward: today.ticketReward,
+        starCoinReward: today.starCoinReward,
         taskId: task.id
       });
       if (!hasOpenTodayTasks()) activeStatusTab = "completed";
@@ -5018,7 +5209,9 @@
       burstConfetti();
       playSfx("complete");
       playSfx("ticket");
-      showToast(`やったね！チケット${today.ticketReward}枚ゲット！`);
+      showToast(today.rewardType === "starCoin"
+        ? `やったね！スターコイン${today.starCoinReward}枚ゲット！`
+        : `やったね！チケット${today.ticketReward}枚ゲット！`);
     }
 
     function cancelTodayTask(taskId) {
@@ -5033,6 +5226,25 @@
       saveState();
       render();
       showToast("今日のやることから外しました。");
+    }
+
+    function exchangeStarCoins() {
+      if (state.starCoins < 5) {
+        showToast(`あと${5 - state.starCoins}枚でチケットに交換できるよ。`);
+        playSfx("error");
+        return;
+      }
+      state.starCoins -= 5;
+      state.coins += 1;
+      addHistory("スターコイン5枚をチケット1枚に交換しました。", "starCoinExchange", {
+        starCoinsUsed: 5,
+        ticketReward: 1
+      });
+      saveState();
+      render();
+      burstConfetti();
+      playSfx("ticket");
+      showToast("スターコイン5枚をチケット1枚に交換したよ！");
     }
 
     function resetDay() {
@@ -5369,6 +5581,7 @@
     });
 
     document.getElementById("resetDayBtn").addEventListener("click", resetDay);
+    document.getElementById("exchangeStarCoinsBtn").addEventListener("click", exchangeStarCoins);
     document.getElementById("spinBtn").addEventListener("click", spinWheel);
     document.getElementById("clearHistoryBtn").addEventListener("click", clearHistory);
     document.getElementById("sendHapichikeCardEmailBtn").addEventListener("click", sendHapichikeCardEmail);
