@@ -460,7 +460,7 @@
 
     .status-bar {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(6, minmax(0, 1fr));
       gap: 10px;
     }
 
@@ -471,6 +471,10 @@
       border: 3px solid rgba(255, 255, 255, .86);
       background: rgba(255, 255, 255, .78);
       box-shadow: 0 10px 22px rgba(62, 76, 112, .13);
+    }
+
+    .star-meter {
+      grid-column: span 2;
     }
 
     .meter-label {
@@ -516,6 +520,92 @@
       color: #94a3b8;
       box-shadow: 0 5px 0 rgba(100, 116, 139, .16);
       text-shadow: none;
+    }
+
+    .star-gift-form {
+      position: relative;
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .star-gift-label {
+      color: #9a5b00;
+      font-size: .78rem;
+      font-weight: 900;
+    }
+
+    .star-gift-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+    }
+
+    .star-gift-input {
+      min-width: 0;
+      border: 3px solid #ffd166;
+      border-radius: 999px;
+      padding: 8px 10px;
+      background: #fff;
+      color: #273043;
+      font-weight: 900;
+      outline: none;
+    }
+
+    .star-gift-input:focus {
+      box-shadow: 0 0 0 4px rgba(255, 209, 102, .28);
+    }
+
+    .star-gift-button {
+      min-width: 48px;
+      border: 3px solid #fff;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffd166, #ff8fab);
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: 900;
+      box-shadow: 0 5px 0 rgba(239, 35, 60, .22);
+      cursor: pointer;
+      text-shadow: 0 1px 0 rgba(39, 48, 67, .25);
+    }
+
+    .star-gift-error {
+      min-height: 1.2em;
+      color: #ef233c;
+      font-size: .76rem;
+      font-weight: 900;
+      line-height: 1.25;
+    }
+
+    .star-gift-suggestions {
+      display: none;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-height: 96px;
+      overflow-y: auto;
+      padding: 6px;
+      border: 2px solid rgba(255, 209, 102, .55);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .92);
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, .7);
+    }
+
+    .star-gift-suggestions.show {
+      display: flex;
+    }
+
+    .star-gift-chip {
+      max-width: 100%;
+      border: 2px solid #fff;
+      border-radius: 999px;
+      padding: 5px 9px;
+      background: linear-gradient(135deg, #fff8d6, #dff7ff);
+      color: #273043;
+      font-size: .75rem;
+      font-weight: 900;
+      box-shadow: 0 3px 0 rgba(39, 48, 67, .08);
+      cursor: pointer;
+      overflow-wrap: anywhere;
     }
 
     .audio-meter {
@@ -2564,11 +2654,20 @@
           <div class="meter-label"><span class="chip">T</span>チケット</div>
           <div class="meter-value" id="coinCount">0</div>
         </div>
-        <div class="meter">
+        <div class="meter star-meter">
           <div class="meter-label">⭐ スターコイン</div>
           <div class="meter-value" id="starCoinCount">0</div>
           <div class="meter-help" id="starCoinHelp">あと5枚でチケット！</div>
           <button class="star-exchange-button" id="exchangeStarCoinsBtn" type="button" disabled>チケットに交換！</button>
+          <div class="star-gift-form">
+            <div class="star-gift-label">ありがとうスターをあげる</div>
+            <div class="star-gift-row">
+              <input class="star-gift-input" id="starGiftInput" maxlength="40" autocomplete="off" placeholder="例：妹にやさしくしてくれた">
+              <button class="star-gift-button" id="starGiftButton" type="button" aria-label="スターをプレゼント">☆</button>
+            </div>
+            <div class="star-gift-error" id="starGiftError" role="alert"></div>
+            <div class="star-gift-suggestions" id="starGiftSuggestions" aria-label="スター履歴候補"></div>
+          </div>
         </div>
         <div class="meter">
           <div class="meter-label">今日のクリア</div>
@@ -3128,6 +3227,7 @@
       if (!saved.audioSettings) needsStateSave = true;
       if (typeof saved.lastDailyResetKey !== "string") needsStateSave = true;
       if (typeof saved.starCoins !== "number") needsStateSave = true;
+      if (!Array.isArray(saved.starGiftHistory)) needsStateSave = true;
       const parentEmail = loadParentEmail(saved.parentEmail || "");
       return {
         childName: sanitizeName(saved.childName || ""),
@@ -3150,6 +3250,7 @@
         },
         lastDailyResetKey: typeof saved.lastDailyResetKey === "string" ? saved.lastDailyResetKey : getDailyResetKey(),
         starCoins: Math.max(0, Number(saved.starCoins) || 0),
+        starGiftHistory: normalizeStarGiftHistory(saved.starGiftHistory),
         happyChanceCards: Math.max(0, Number(saved.happyChanceCards) || 0),
         points: {
           snack: Number(saved.points?.snack) || 0,
@@ -3264,6 +3365,15 @@
 
     function normalizeRewardType(rewardType) {
       return rewardType === "starCoin" ? "starCoin" : "ticket";
+    }
+
+    function normalizeStarGiftHistory(history) {
+      if (!Array.isArray(history)) return [];
+      return [...new Set(history.map(item => sanitizeStarGiftMessage(item)).filter(Boolean))].slice(0, 20);
+    }
+
+    function sanitizeStarGiftMessage(value) {
+      return String(value || "").trim().replace(/\s+/g, " ").slice(0, 40);
     }
 
     function isTaskCompleted(task) {
@@ -3666,6 +3776,75 @@
       document.getElementById("taskTotal").textContent = state.todayTasks.length;
       document.getElementById("levelText").textContent = Math.max(1, Math.floor((state.history.length + state.coins) / 6) + 1);
       renderBadges(done);
+    }
+
+    function getStarGiftMatches() {
+      const input = document.getElementById("starGiftInput");
+      const query = sanitizeStarGiftMessage(input?.value || "").toLowerCase();
+      const history = normalizeStarGiftHistory(state.starGiftHistory);
+      return (query ? history.filter(item => item.toLowerCase().includes(query)) : history).slice(0, 8);
+    }
+
+    function renderStarGiftSuggestions() {
+      const suggestions = document.getElementById("starGiftSuggestions");
+      if (!suggestions) return;
+      const matches = getStarGiftMatches();
+      if (!matches.length) {
+        suggestions.classList.remove("show");
+        suggestions.innerHTML = "";
+        return;
+      }
+      suggestions.innerHTML = matches.map(item => `
+        <button class="star-gift-chip" type="button" data-star-gift-suggestion-index="${matches.indexOf(item)}">${escapeHtml(item)}</button>
+      `).join("");
+      suggestions.classList.add("show");
+      suggestions.querySelectorAll("[data-star-gift-suggestion-index]").forEach(button => {
+        button.addEventListener("click", () => {
+          document.getElementById("starGiftInput").value = matches[Number(button.dataset.starGiftSuggestionIndex)] || "";
+          document.getElementById("starGiftError").textContent = "";
+          suggestions.classList.remove("show");
+        });
+      });
+    }
+
+    function hideStarGiftSuggestions() {
+      const suggestions = document.getElementById("starGiftSuggestions");
+      if (suggestions) suggestions.classList.remove("show");
+    }
+
+    function saveStarGiftHistory(message) {
+      state.starGiftHistory = [message, ...normalizeStarGiftHistory(state.starGiftHistory).filter(item => item !== message)].slice(0, 20);
+    }
+
+    function giftStarCoin() {
+      const input = document.getElementById("starGiftInput");
+      const error = document.getElementById("starGiftError");
+      const message = sanitizeStarGiftMessage(input.value);
+      if (!message) {
+        error.textContent = "ありがとうメッセージを入力してね";
+        input.focus();
+        playSfx("error");
+        return;
+      }
+
+      const ok = window.confirm(`この内容でスターを1つプレゼントしますか？\n\n「${message}」`);
+      if (!ok) return;
+
+      state.starCoins += 1;
+      saveStarGiftHistory(message);
+      addHistory(`ありがとうスターをプレゼント。「${message}」 スターコイン +1`, "starCoinGift", {
+        id: `star-gift-${Date.now()}`,
+        message,
+        amount: 1,
+        createdAt: nowIsoString()
+      });
+      input.value = "";
+      error.textContent = "";
+      hideStarGiftSuggestions();
+      render();
+      burstConfetti();
+      playSfx("success");
+      showToast(`「${message}」にありがとうスター！`);
     }
 
     function updateBetControls() {
@@ -5030,6 +5209,19 @@
             <span class="pay-log-detail">送信先：${escapeHtml(item.to || "")}</span>
             <span class="log-date">${escapeHtml(item.date || "")}</span>
           </div>
+        ` : item.type === "starCoinGift" ? `
+          <div class="log-item task-complete-log">
+            ⭐ ありがとうスターをプレゼント
+            <span class="pay-log-detail">「${escapeHtml(item.message || "")}」</span>
+            <span class="task-complete-ticket">スターコイン +${Number(item.amount) || 1}</span>
+            <span class="log-date">${escapeHtml(item.date || "")}</span>
+          </div>
+        ` : item.type === "starCoinExchange" ? `
+          <div class="log-item task-complete-log">
+            ⭐ スターコインをチケットに交換
+            <span class="task-complete-ticket">スターコイン -5 / チケット +1</span>
+            <span class="log-date">${escapeHtml(item.date || "")}</span>
+          </div>
         ` : `
           <div class="log-item">${escapeHtml(item.text)}<span class="log-date">${escapeHtml(item.date)}</span></div>
         `).join("")
@@ -5582,6 +5774,21 @@
 
     document.getElementById("resetDayBtn").addEventListener("click", resetDay);
     document.getElementById("exchangeStarCoinsBtn").addEventListener("click", exchangeStarCoins);
+    document.getElementById("starGiftButton").addEventListener("click", giftStarCoin);
+    document.getElementById("starGiftInput").addEventListener("focus", renderStarGiftSuggestions);
+    document.getElementById("starGiftInput").addEventListener("input", () => {
+      document.getElementById("starGiftError").textContent = "";
+      renderStarGiftSuggestions();
+    });
+    document.getElementById("starGiftInput").addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        giftStarCoin();
+      }
+    });
+    document.addEventListener("click", event => {
+      if (!event.target.closest(".star-gift-form")) hideStarGiftSuggestions();
+    });
     document.getElementById("spinBtn").addEventListener("click", spinWheel);
     document.getElementById("clearHistoryBtn").addEventListener("click", clearHistory);
     document.getElementById("sendHapichikeCardEmailBtn").addEventListener("click", sendHapichikeCardEmail);
