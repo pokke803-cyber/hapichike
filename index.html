@@ -987,6 +987,52 @@
       font-weight: 900;
     }
 
+    .bulk-parent-tools,
+    .bulk-edit-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .bulk-parent-tools.hidden,
+    .bulk-parent-password.hidden,
+    .bulk-edit-toolbar.hidden {
+      display: none;
+    }
+
+    .bulk-parent-password {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border: 3px solid #fff;
+      border-radius: 18px;
+      background: linear-gradient(135deg, #fff, #fff8d6);
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .1);
+      font-weight: 900;
+    }
+
+    .bulk-parent-password input {
+      width: 100%;
+      border: 3px solid #ffd166;
+      border-radius: 14px;
+      padding: 10px;
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .bulk-edit-note {
+      color: #475569;
+      font-size: .84rem;
+      font-weight: 900;
+    }
+
+    .bulk-task-card.editing {
+      grid-template-columns: minmax(0, 1fr) auto;
+      cursor: default;
+    }
+
     .bulk-task-list {
       display: grid;
       gap: 10px;
@@ -2823,6 +2869,26 @@
           <span id="bulkSelectedCount">0こ選んでいます</span>
           <span>チェックしてまとめて追加</span>
         </div>
+        <div class="bulk-parent-tools" id="bulkParentTools">
+          <span class="bulk-edit-note">リストを直すときはおうちの人用</span>
+          <button class="secondary" type="button" id="openBulkParentEditBtn">おうちの人用 編集する</button>
+        </div>
+        <div class="bulk-parent-password hidden" id="bulkParentPasswordPanel">
+          <span>お手伝いリストを編集するにはパスワードを入れてください</span>
+          <input id="bulkParentPasswordInput" type="password" inputmode="numeric" autocomplete="off" placeholder="パスワード">
+          <div class="edit-error" id="bulkParentPasswordError" role="alert"></div>
+          <div class="edit-actions">
+            <button class="secondary" type="button" id="cancelBulkParentPasswordBtn">もどる</button>
+            <button class="primary" type="button" id="unlockBulkEditBtn">入る</button>
+          </div>
+        </div>
+        <div class="bulk-edit-toolbar hidden" id="bulkEditToolbar">
+          <span class="bulk-edit-note">親編集モード中です</span>
+          <div class="parent-manage-actions">
+            <button class="primary" type="button" id="bulkAddNewTaskBtn">新しいお手伝いを追加</button>
+            <button class="secondary" type="button" id="closeBulkEditModeBtn">編集モードを終了</button>
+          </div>
+        </div>
         <div class="task-filter" id="bulkTaskCategoryFilter" aria-label="一括追加カテゴリー"></div>
         <div class="bulk-task-list" id="bulkTaskList"></div>
         <div class="edit-actions">
@@ -3186,6 +3252,7 @@
     let activeStatusTab = "active";
     let bulkTaskCategory = "all";
     let bulkSelectedTaskIds = new Set();
+    let bulkEditMode = false;
     let activeBet = 1;
     let rotation = 0;
     let spinning = false;
@@ -3197,6 +3264,7 @@
     let parentTaskRewardDraft = 1;
     let parentTaskRewardTypeDraft = "ticket";
     let parentTaskStarCoinRewardDraft = 1;
+    let parentTaskFormReturnToBulk = false;
     let parentTaskIconDraft = "🎟️";
     let parentTaskIconManuallySelected = false;
     let ticketGiftDraftAmount = 1;
@@ -4252,6 +4320,8 @@
     function openBulkTaskPicker() {
       bulkTaskCategory = activeTaskCategory;
       bulkSelectedTaskIds = new Set();
+      bulkEditMode = false;
+      resetBulkParentPasswordPanel();
       document.getElementById("bulkTaskPickerModal").classList.remove("hidden");
       renderBulkTaskPicker();
     }
@@ -4259,6 +4329,8 @@
     function closeBulkTaskPicker() {
       document.getElementById("bulkTaskPickerModal").classList.add("hidden");
       bulkSelectedTaskIds = new Set();
+      bulkEditMode = false;
+      resetBulkParentPasswordPanel();
     }
 
     function getBulkCategoryFilteredTasks() {
@@ -4268,10 +4340,61 @@
     }
 
     function renderBulkTaskPicker() {
+      renderBulkEditControls();
       renderBulkTaskCategoryFilter();
       renderBulkTaskList();
       document.getElementById("bulkSelectedCount").textContent = `${bulkSelectedTaskIds.size}こ選んでいます`;
       document.getElementById("bulkAddTasksBtn").disabled = bulkSelectedTaskIds.size === 0;
+    }
+
+    function resetBulkParentPasswordPanel() {
+      const panel = document.getElementById("bulkParentPasswordPanel");
+      const input = document.getElementById("bulkParentPasswordInput");
+      const error = document.getElementById("bulkParentPasswordError");
+      if (panel) panel.classList.add("hidden");
+      if (input) input.value = "";
+      if (error) error.textContent = "";
+    }
+
+    function renderBulkEditControls() {
+      document.getElementById("bulkParentTools").classList.toggle("hidden", bulkEditMode);
+      document.getElementById("bulkEditToolbar").classList.toggle("hidden", !bulkEditMode);
+      if (bulkEditMode) resetBulkParentPasswordPanel();
+    }
+
+    function showBulkParentPassword() {
+      const panel = document.getElementById("bulkParentPasswordPanel");
+      panel.classList.remove("hidden");
+      document.getElementById("bulkParentPasswordError").textContent = "";
+      setTimeout(() => document.getElementById("bulkParentPasswordInput").focus(), 0);
+    }
+
+    function unlockBulkEditMode() {
+      const input = document.getElementById("bulkParentPasswordInput");
+      const error = document.getElementById("bulkParentPasswordError");
+      const password = input.value.trim();
+      if (!password) {
+        error.textContent = "パスワードを入れてください";
+        input.focus();
+        return;
+      }
+      if (password !== state.parentPassword) {
+        error.textContent = "パスワードがちがいます";
+        input.select();
+        playSfx("error");
+        return;
+      }
+      bulkEditMode = true;
+      resetBulkParentPasswordPanel();
+      renderBulkTaskPicker();
+      showToast("親編集モードに入りました。");
+      playSfx("success");
+    }
+
+    function closeBulkEditMode() {
+      bulkEditMode = false;
+      renderBulkTaskPicker();
+      showToast("編集モードを終了しました。");
     }
 
     function renderBulkTaskCategoryFilter() {
@@ -4302,6 +4425,25 @@
       list.innerHTML = tasks.map(task => {
         const added = isTaskInTodayList(task.id);
         const selected = bulkSelectedTaskIds.has(task.id);
+        if (bulkEditMode) {
+          return `
+            <article class="bulk-task-card editing ${added ? "added" : ""}">
+              <div class="bulk-task-main">
+                <div class="bulk-task-title">${escapeHtml(task.icon)} ${escapeHtml(task.title)}</div>
+                <div class="task-meta">
+                  <span class="task-badge task-category">${escapeHtml(getTaskCategoryLabel(task.category))}</span>
+                  <span class="task-badge ${task.difficulty}">${difficultyLabels[task.difficulty]}</span>
+                  <span class="status-badge idle">${getTaskRewardType(task) === "starCoin" ? "⭐" : "🎫"} ${getTaskRewardAmount(task)}枚</span>
+                  ${added ? `<span class="status-badge done">今日に追加済み</span>` : ""}
+                </div>
+              </div>
+              <div class="parent-manage-actions">
+                <button class="task-action edit" type="button" data-bulk-edit-task="${escapeHtml(task.id)}">編集</button>
+                <button class="task-action danger-button" type="button" data-bulk-delete-task="${escapeHtml(task.id)}">削除</button>
+              </div>
+            </article>
+          `;
+        }
         return `
           <label class="bulk-task-card ${selected ? "selected" : ""} ${added ? "added" : ""}">
             <input class="bulk-task-check" type="checkbox" data-bulk-task="${escapeHtml(task.id)}" ${selected ? "checked" : ""} ${added ? "disabled" : ""}>
@@ -4329,6 +4471,32 @@
           renderBulkTaskPicker();
         });
       });
+      list.querySelectorAll("[data-bulk-edit-task]").forEach(button => {
+        button.addEventListener("click", () => openParentTaskForm(button.dataset.bulkEditTask, { returnToBulk: true }));
+      });
+      list.querySelectorAll("[data-bulk-delete-task]").forEach(button => {
+        button.addEventListener("click", () => deleteTaskFromBulkPicker(button.dataset.bulkDeleteTask));
+      });
+    }
+
+    function addTaskFromBulkPicker() {
+      openParentTaskForm(null, { returnToBulk: true });
+    }
+
+    function deleteTaskFromBulkPicker(taskId) {
+      const task = state.tasks.find(item => item.id === taskId);
+      if (!task) return;
+      const ok = window.confirm(`このお手伝いをリストから削除しますか？\n\n「${task.title}」`);
+      if (!ok) return;
+      state.tasks = state.tasks.filter(item => item.id !== taskId);
+      state.todayTasks = state.todayTasks.filter(item => item.taskId !== taskId);
+      bulkSelectedTaskIds.delete(taskId);
+      addHistory(`「${task.title}」をお手伝いリストから削除しました。`);
+      saveState();
+      render();
+      renderBulkTaskPicker();
+      playSfx("click");
+      showToast("お手伝いを削除しました。");
     }
 
     function addSelectedTasksToToday() {
@@ -4362,6 +4530,7 @@
       parentRewardDraft = {};
       parentEditingTaskId = null;
       parentDeleteTaskId = null;
+      parentTaskFormReturnToBulk = false;
       parentTaskRewardDraft = 1;
       document.getElementById("parentPasswordInput").value = "";
       document.getElementById("parentPasswordError").textContent = "";
@@ -4375,6 +4544,7 @@
     }
 
     function closeParentSettings() {
+      const shouldReturnToBulk = parentTaskFormReturnToBulk;
       document.getElementById("parentSettingsModal").classList.add("hidden");
       document.getElementById("parentPasswordError").textContent = "";
       document.getElementById("parentRewardMessage").textContent = "";
@@ -4383,6 +4553,12 @@
       parentRewardDraft = {};
       parentEditingTaskId = null;
       parentDeleteTaskId = null;
+      parentTaskFormReturnToBulk = false;
+      if (shouldReturnToBulk) {
+        document.getElementById("bulkTaskPickerModal").classList.remove("hidden");
+        bulkEditMode = true;
+        renderBulkTaskPicker();
+      }
     }
 
     function showParentPanel(panelId) {
@@ -4751,6 +4927,18 @@
       renderParentTaskEditList();
     }
 
+    function closeParentTaskForm() {
+      if (parentTaskFormReturnToBulk) {
+        parentTaskFormReturnToBulk = false;
+        document.getElementById("parentSettingsModal").classList.add("hidden");
+        document.getElementById("bulkTaskPickerModal").classList.remove("hidden");
+        bulkEditMode = true;
+        renderBulkTaskPicker();
+        return;
+      }
+      openParentTaskEditPage();
+    }
+
     function renderParentTaskEditList() {
       const list = document.getElementById("parentEditTaskList");
       if (!state.tasks.length) {
@@ -4861,8 +5049,9 @@
       renderParentTaskIconPicker();
     }
 
-    function openParentTaskForm(taskId = null) {
+    function openParentTaskForm(taskId = null, options = {}) {
       const task = state.tasks.find(item => item.id === taskId);
+      parentTaskFormReturnToBulk = Boolean(options.returnToBulk);
       parentEditingTaskId = task ? task.id : null;
       parentTaskRewardTypeDraft = getTaskRewardType(task);
       parentTaskRewardDraft = Number(task?.ticketReward) || 1;
@@ -4875,6 +5064,10 @@
       parentTaskIconDraft = task?.icon ? pickSingleIcon(task.icon) : getRecommendedIcons("", "cleanup")[0] || "🎟️";
       document.getElementById("parentTaskIconInput").value = parentTaskIconDraft;
       document.getElementById("parentTaskFormError").textContent = "";
+      if (parentTaskFormReturnToBulk) {
+        document.getElementById("bulkTaskPickerModal").classList.add("hidden");
+        document.getElementById("parentSettingsModal").classList.remove("hidden");
+      }
       showParentPanel("parentTaskFormPanel");
       renderParentTaskRewardTypeChoices();
       renderParentTaskRewardChoices();
@@ -4983,7 +5176,15 @@
 
       saveState();
       render();
-      openParentTaskEditPage();
+      if (parentTaskFormReturnToBulk) {
+        parentTaskFormReturnToBulk = false;
+        document.getElementById("parentSettingsModal").classList.add("hidden");
+        document.getElementById("bulkTaskPickerModal").classList.remove("hidden");
+        bulkEditMode = true;
+        renderBulkTaskPicker();
+      } else {
+        openParentTaskEditPage();
+      }
     }
 
     function openParentDeleteConfirm(taskId) {
@@ -5718,6 +5919,17 @@
     document.getElementById("openBulkTaskPickerBtn").addEventListener("click", openBulkTaskPicker);
     document.getElementById("bulkTaskPickerClose").addEventListener("click", closeBulkTaskPicker);
     document.getElementById("bulkTaskPickerCancel").addEventListener("click", closeBulkTaskPicker);
+    document.getElementById("openBulkParentEditBtn").addEventListener("click", showBulkParentPassword);
+    document.getElementById("cancelBulkParentPasswordBtn").addEventListener("click", resetBulkParentPasswordPanel);
+    document.getElementById("unlockBulkEditBtn").addEventListener("click", unlockBulkEditMode);
+    document.getElementById("bulkParentPasswordInput").addEventListener("keydown", event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        unlockBulkEditMode();
+      }
+    });
+    document.getElementById("bulkAddNewTaskBtn").addEventListener("click", addTaskFromBulkPicker);
+    document.getElementById("closeBulkEditModeBtn").addEventListener("click", closeBulkEditMode);
     document.getElementById("bulkAddTasksBtn").addEventListener("click", addSelectedTasksToToday);
     document.getElementById("bulkTaskPickerModal").addEventListener("click", event => {
       if (event.target.id === "bulkTaskPickerModal") closeBulkTaskPicker();
@@ -5752,7 +5964,7 @@
     document.getElementById("parentTaskEditBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("addParentTaskBtn").addEventListener("click", () => openParentTaskForm());
     document.getElementById("parentTaskFormPanel").addEventListener("submit", saveParentTaskForm);
-    document.getElementById("cancelParentTaskFormBtn").addEventListener("click", openParentTaskEditPage);
+    document.getElementById("cancelParentTaskFormBtn").addEventListener("click", closeParentTaskForm);
     document.getElementById("parentTaskTitleInput").addEventListener("input", handleParentTaskIconSuggestionChange);
     document.getElementById("parentTaskCategoryInput").addEventListener("change", handleParentTaskIconSuggestionChange);
     document.getElementById("parentTaskIconInput").addEventListener("input", handleParentTaskIconInput);
