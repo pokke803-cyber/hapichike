@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="HAPICHIKE 親用閲覧専用ダッシュボード" />
+    <meta name="theme-color" content="#fff9ed" />
+    <title>おうちの人用 | HAPICHIKE</title>
+    <link rel="stylesheet" href="./parent.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section id="configView" class="center-card" hidden>
+        <div class="brand-mark" aria-hidden="true">H</div>
+        <p class="eyebrow">HAPICHIKE PARENT</p>
+        <h1>Supabase接続を確認してください</h1>
+        <p class="support-text"><code>VITE_SUPABASE_URL</code> と <code>VITE_SUPABASE_ANON_KEY</code> を設定すると、親用ダッシュボードを使えます。</p>
+      </section>
+
+      <section id="loginView" class="center-card" hidden>
+        <div class="brand-mark" aria-hidden="true">H</div>
+        <p class="eyebrow">HAPICHIKE PARENT</p>
+        <h1>おうちの人ログイン</h1>
+        <p class="support-text">Supabase Auth のアカウントでログインします。</p>
+        <form id="loginForm" class="login-form">
+          <label>
+            <span>メールアドレス</span>
+            <input id="emailInput" name="email" type="email" autocomplete="email" inputmode="email" required />
+          </label>
+          <label>
+            <span>パスワード</span>
+            <input id="passwordInput" name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <button id="showPasswordResetButton" class="text-button" type="button">パスワードを設定・再設定する</button>
+          <p id="loginError" class="form-error" role="alert"></p>
+          <button id="loginButton" class="primary-button" type="submit">ログイン</button>
+        </form>
+        <div id="passwordResetPanel" hidden>
+          <h2>パスワードを設定・再設定</h2>
+          <p class="support-text">登録済みのメールアドレスへ、パスワード設定用のリンクを送ります。</p>
+          <form id="passwordResetForm" class="login-form">
+            <label>
+              <span>メールアドレス</span>
+              <input id="resetEmailInput" name="reset-email" type="email" autocomplete="email" inputmode="email" required />
+            </label>
+            <p id="passwordResetMessage" class="form-error" role="status"></p>
+            <button id="passwordResetButton" class="primary-button" type="submit">再設定メールを送る</button>
+          </form>
+          <button id="showLoginButton" class="text-button" type="button">ログイン画面へ戻る</button>
+        </div>
+      </section>
+
+      <section id="loadingView" class="center-card loading-card" aria-live="polite">
+        <div class="loader" aria-hidden="true"></div>
+        <h1>データを読み込み中...</h1>
+      </section>
+
+      <section id="dashboardView" hidden>
+        <header class="app-header">
+          <div>
+            <p class="eyebrow">HAPICHIKE PARENT</p>
+            <h1>みまもりダッシュボード</h1>
+            <p id="parentEmail" class="account-text"></p>
+          </div>
+          <button id="logoutButton" class="secondary-button" type="button">ログアウト</button>
+        </header>
+
+        <div id="dashboardError" class="notice notice-error" role="alert" hidden></div>
+        <section id="householdEmpty" class="empty-card" hidden>
+          <span aria-hidden="true">🏠</span>
+          <h2>所属する家庭がありません</h2>
+          <p>家庭への招待や Supabase の登録状況を確認してください。</p>
+        </section>
+
+        <div id="dashboardContent" hidden>
+          <section class="selector-card">
+            <label id="householdField" class="select-field">
+              <span>所属家庭</span>
+              <select id="householdSelect"></select>
+            </label>
+            <div>
+              <span class="field-label">子どもを切り替え</span>
+              <div id="childTabs" class="child-tabs" role="tablist" aria-label="子どもを切り替え"></div>
+            </div>
+          </section>
+
+          <section id="childrenEmpty" class="empty-card" hidden>
+            <span aria-hidden="true">👧</span>
+            <h2>子どもがまだ登録されていません</h2>
+          </section>
+
+          <div id="childContent" hidden>
+            <section class="hero-card">
+              <div>
+                <p class="hero-kicker">選択中の子ども</p>
+                <h2 id="selectedChildName"></h2>
+              </div>
+              <div class="read-only-badge">閲覧専用</div>
+            </section>
+
+            <section aria-labelledby="balanceTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">BALANCE</p>
+                  <h2 id="balanceTitle">いまの残高</h2>
+                </div>
+                <p id="balanceUpdated" class="updated-text"></p>
+              </div>
+              <div id="balanceLoading" class="inline-loading" hidden>残高を読み込み中...</div>
+              <div id="balanceEmpty" class="notice" hidden>残高データがまだありません。</div>
+              <div id="balanceGrid" class="balance-grid"></div>
+            </section>
+
+            <section class="history-section" aria-labelledby="choresTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">RECENT CHORES</p>
+                  <h2 id="choresTitle">最近のお手伝い</h2>
+                </div>
+              </div>
+              <div id="choresList" class="history-list"></div>
+            </section>
+
+            <section class="history-section" aria-labelledby="logsTitle">
+              <div class="section-heading">
+                <div>
+                  <p class="eyebrow">REWARD LOG</p>
+                  <h2 id="logsTitle">最近の報酬履歴</h2>
+                </div>
+              </div>
+              <div id="logsLoading" class="inline-loading" hidden>履歴を読み込み中...</div>
+              <div id="logsList" class="history-list"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="./parent.js"></script>
+  </body>
+</html>
