@@ -12,6 +12,7 @@ Supabase設定はVite環境変数 `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KE
 |---|---|---|
 | `kidsVegasCasino.v1` | `state` 全体。名前、残高、タスク、履歴、親設定、音設定など | 保存がない／JSON不正／tasks不在なら初期状態 |
 | `kidsVegasCasino.parentEmail.v1` | 親メール文字列 | 空文字。主状態内の旧 `parentEmail` より優先 |
+| `kidsVegasCasino.restoreSafety.v1` | 復元直前のversion 1 backup envelope | 復元実行直前に上書き。秘密情報は除外 |
 
 主キーの詳細と保存フィールドは `DATA_STRUCTURE.md` を参照してください。
 
@@ -47,11 +48,11 @@ Supabase設定はVite環境変数 `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KE
 
 ## Export / Import / Backup / Restore
 
-すべて未実装です。JSONダウンロード、FileReader、復元バリデーション、復元前退避、子ども別バックアップはありません。詳細は `BACKUP_RESTORE.md` を参照してください。
+親設定の「データ管理」にversion 1 JSONのexport、validation、preview、明示確認、復元直前退避、localStorage限定restoreを実装しています。対象は主stateと親メールの2キーだけで、親パスワードと認証・token類は除外します。詳細は `BACKUP_RESTORE.md` を参照してください。
 
 ## リスク
 
-- 単一キー・単一端末で、バックアップも同期もない。
+- cloud同期はなく、バックアップファイルの保管は利用者が行う。
 - `localStorage.setItem` の失敗を捕捉しない。
 - スキーマversionと移行前退避がないため、正規化の誤りが保存時に確定する可能性がある。
 - 親パスワードと多くの家庭データが平文で、同一オリジンのJavaScriptから読める。

@@ -1438,6 +1438,79 @@
       font-size: 1.05rem;
     }
 
+    .backup-actions {
+      display: grid;
+      gap: 10px;
+    }
+
+    .backup-preview {
+      display: grid;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .backup-preview-summary,
+    .backup-compare-row {
+      border: 3px solid #fff;
+      border-radius: 16px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, .88);
+      box-shadow: 0 5px 0 rgba(39, 48, 67, .1);
+    }
+
+    .backup-compare-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-weight: 900;
+    }
+
+    .backup-confirm-label {
+      display: flex !important;
+      grid-template-columns: auto 1fr;
+      align-items: flex-start;
+    }
+
+    .backup-confirm-label input {
+      width: auto;
+      margin-top: 3px;
+    }
+
+    .cloud-status-grid {
+      display: grid;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .cloud-status-item {
+      border: 1px solid #dce5ef;
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: #f8fbff;
+    }
+
+    #cloudHouseholdRow.hidden { display: none !important; }
+
+    .cloud-compare-row {
+      display: grid;
+      grid-template-columns: minmax(105px, 1.4fr) repeat(3, minmax(52px, .7fr));
+      gap: 8px;
+      align-items: center;
+      padding: 9px 6px;
+      border-bottom: 1px solid #e4eaf1;
+      font-size: .88rem;
+    }
+
+    .cloud-compare-head {
+      font-weight: 800;
+      background: #f4f7fb;
+      border-radius: 10px 10px 0 0;
+    }
+
+    .cloud-compare-row.local-greater span:last-child { color: #0b7a3e; font-weight: 800; }
+    .cloud-compare-row.cloud-greater span:last-child { color: #a24c00; font-weight: 800; }
+    .cloud-compare-row.missing span:last-child { color: #b42318; font-weight: 800; }
+
     .transfer-balance-row,
     .transfer-history-list {
       display: grid;
@@ -1564,6 +1637,12 @@
       color: #31405a;
       background: #ffffff;
       border: 2px solid #dce7f8;
+    }
+
+    .button-link {
+      display: block;
+      text-align: center;
+      text-decoration: none;
     }
 
     .casino-table {
@@ -2940,6 +3019,14 @@
             <strong>💌 親メール設定</strong>
             今日のハピチケカードを送るメールアドレスを登録できます。
           </button>
+          <button class="parent-menu-button" type="button" id="openBackupRestoreBtn">
+            <strong>💾 データ管理</strong>
+            端末データのバックアップ書き出し・確認・復元ができます。
+          </button>
+          <button class="parent-menu-button" type="button" id="openCloudMappingBtn">
+            <strong>☁️ クラウド連携（比較のみ）</strong>
+            local / cloud残高を読み取り比較し、子どもの対応付けを確認できます。
+          </button>
         </div>
         <div class="parent-save-row">
           <button class="secondary" type="button" id="parentMenuBackBtn">もどる</button>
@@ -2987,6 +3074,53 @@
         <div class="edit-actions">
           <button class="secondary" type="button" id="parentEmailBackBtn">もどる</button>
           <button class="primary" type="button" id="saveParentEmailBtn">保存</button>
+        </div>
+      </div>
+      <div class="info-modal-body edit-form parent-panel hidden" id="backupRestorePanel">
+        <p class="parent-note">この機能は端末内のデータだけを扱います。復元内容はSupabase cloudへ送信・反映されません。</p>
+        <p class="parent-note">バックアップには親メールが含まれます。親パスワードやAuth session、access tokenなどの秘密情報は含めません。</p>
+        <div class="backup-actions">
+          <button class="primary" type="button" id="exportBackupBtn">バックアップを書き出す</button>
+          <button class="secondary" type="button" id="selectBackupBtn">バックアップを読み込む</button>
+          <input class="hidden" id="backupFileInput" type="file" accept="application/json,.json">
+        </div>
+        <div class="edit-error" id="backupMessage" role="alert"></div>
+        <div class="backup-preview hidden" id="backupPreview"></div>
+        <label class="backup-confirm-label hidden" id="backupConfirmLabel">
+          <input id="backupConfirmCheckbox" type="checkbox">
+          <span>このバックアップで現在の端末データを置き換えます</span>
+        </label>
+        <div class="edit-actions hidden" id="backupRestoreActions">
+          <button class="primary danger-button" type="button" id="executeRestoreBtn" disabled>復元を実行する</button>
+        </div>
+        <div class="parent-save-row">
+          <button class="secondary" type="button" id="backupRestoreBackBtn">もどる</button>
+        </div>
+      </div>
+      <div class="info-modal-body edit-form parent-panel hidden" id="cloudMappingPanel">
+        <p class="parent-note">Phase 1の確認画面です。SupabaseはSELECTだけを行い、残高・履歴・既存local stateを変更しません。</p>
+        <div class="edit-error" id="cloudMappingStatus" role="status"></div>
+        <div class="cloud-status-grid">
+          <div class="cloud-status-item"><strong>Local child</strong><br><span id="cloudLocalChild">確認中</span></div>
+          <label class="hidden" id="cloudHouseholdRow">
+            household
+            <select id="cloudHouseholdSelect"></select>
+          </label>
+          <label>
+            対応するクラウドChild（自動確定しません）
+            <select id="cloudChildSelect"><option value="">明示的に選択してください</option></select>
+          </label>
+        </div>
+        <div class="backup-actions">
+          <button class="primary" type="button" id="saveCloudMappingBtn" disabled>対応付けだけを保存</button>
+          <a class="secondary button-link" href="/parent/">親ダッシュボード／ログイン</a>
+        </div>
+        <div class="ticket-gift-summary">Phase 2判定：<strong id="cloudImportReadiness">Mapping required</strong></div>
+        <div class="backup-preview" id="cloudBalanceComparison">
+          <p class="parent-note">対応するクラウドChildを選んでください。</p>
+        </div>
+        <div class="parent-save-row">
+          <button class="secondary" type="button" id="cloudMappingBackBtn">もどる</button>
         </div>
       </div>
       <div class="info-modal-body edit-form parent-panel hidden" id="parentTicketGiftPanel">
@@ -3088,6 +3222,9 @@
   </div>
   <button class="parent-entry" id="openParentSettingsBtn" type="button">おうちの人用</button>
 
+  <script type="module" src="/src/backup-core.js"></script>
+  <script type="module" src="/src/cloud-mapping-core.js"></script>
+  <script type="module" src="/src/cloud-mapping-ui.js"></script>
   <script>
     const storageKey = "kidsVegasCasino.v1";
     const parentEmailStorageKey = "kidsVegasCasino.parentEmail.v1";
@@ -3269,6 +3406,7 @@
     let parentTaskIconManuallySelected = false;
     let ticketGiftDraftAmount = 1;
     let ticketGiftPending = null;
+    let pendingBackupEnvelope = null;
     let usePayAmount = { sweets: "", toy: "", game: "" };
     let audioUnlocked = false;
     let audioContext = null;
@@ -4562,7 +4700,7 @@
     }
 
     function showParentPanel(panelId) {
-      ["parentPasswordPanel", "parentMenuPanel", "parentRewardPanel", "parentPayTransferPanel", "parentEmailPanel", "parentTicketGiftPanel", "parentTaskEditPanel", "parentTaskFormPanel", "parentDeletePanel"].forEach(id => {
+      ["parentPasswordPanel", "parentMenuPanel", "parentRewardPanel", "parentPayTransferPanel", "parentEmailPanel", "backupRestorePanel", "cloudMappingPanel", "parentTicketGiftPanel", "parentTaskEditPanel", "parentTaskFormPanel", "parentDeletePanel"].forEach(id => {
         document.getElementById(id).classList.toggle("hidden", id !== panelId);
       });
     }
@@ -4691,6 +4829,98 @@
       document.getElementById("parentEmailMessage").className = "edit-error";
       showParentPanel("parentEmailPanel");
       setTimeout(() => document.getElementById("parentEmailInput").focus(), 0);
+    }
+
+    function resetBackupRestorePanel() {
+      pendingBackupEnvelope = null;
+      document.getElementById("backupFileInput").value = "";
+      document.getElementById("backupMessage").textContent = "";
+      document.getElementById("backupPreview").classList.add("hidden");
+      document.getElementById("backupPreview").innerHTML = "";
+      document.getElementById("backupConfirmLabel").classList.add("hidden");
+      document.getElementById("backupConfirmCheckbox").checked = false;
+      document.getElementById("backupRestoreActions").classList.add("hidden");
+      document.getElementById("executeRestoreBtn").disabled = true;
+    }
+
+    function openBackupRestore() {
+      resetBackupRestorePanel();
+      showParentPanel("backupRestorePanel");
+    }
+
+    function openCloudMapping() {
+      showParentPanel("cloudMappingPanel");
+      window.dispatchEvent(new CustomEvent("hapichike:open-cloud-mapping"));
+    }
+
+    function exportBackup() {
+      const message = document.getElementById("backupMessage");
+      try {
+        const envelope = window.HapichikeBackup.createBackup(localStorage);
+        const blob = new Blob([`${JSON.stringify(envelope, null, 2)}\n`], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = window.HapichikeBackup.filename(new Date(envelope.createdAt));
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+        message.textContent = "バックアップを書き出しました。安全な場所に保管してください。";
+        message.className = "edit-error pay-message success";
+      } catch (error) {
+        message.textContent = error.message;
+        message.className = "edit-error";
+        playSfx("error");
+      }
+    }
+
+    async function loadBackupFile(event) {
+      const file = event.target.files?.[0];
+      resetBackupRestorePanel();
+      if (!file) return;
+      const message = document.getElementById("backupMessage");
+      try {
+        const envelope = window.HapichikeBackup.parseBackup(await file.text());
+        const details = window.HapichikeBackup.preview(envelope, state);
+        pendingBackupEnvelope = envelope;
+        const formatValue = value => typeof value === "boolean" ? (value ? "あり" : "なし") : (value ?? 0);
+        document.getElementById("backupPreview").innerHTML = `
+          <div class="backup-preview-summary">
+            <strong>${escapeHtml(details.childName)} のバックアップ</strong><br>
+            日時：${escapeHtml(new Date(details.createdAt).toLocaleString("ja-JP"))}<br>
+            format version：${details.version}
+          </div>
+          ${details.rows.map(([label, current, backup]) => `
+            <div class="backup-compare-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(formatValue(current))} → ${escapeHtml(formatValue(backup))}</span></div>
+          `).join("")}
+        `;
+        document.getElementById("backupPreview").classList.remove("hidden");
+        document.getElementById("backupConfirmLabel").classList.remove("hidden");
+        document.getElementById("backupRestoreActions").classList.remove("hidden");
+        message.textContent = "内容を確認してください。まだ端末データは変更されていません。";
+        message.className = "edit-error pay-message success";
+      } catch (error) {
+        pendingBackupEnvelope = null;
+        message.textContent = error.message;
+        message.className = "edit-error";
+        playSfx("error");
+      }
+    }
+
+    function executeBackupRestore() {
+      const message = document.getElementById("backupMessage");
+      if (!pendingBackupEnvelope || !document.getElementById("backupConfirmCheckbox").checked) return;
+      try {
+        window.HapichikeBackup.restore(localStorage, pendingBackupEnvelope);
+        message.textContent = "復元しました。画面を再読み込みします。";
+        message.className = "edit-error pay-message success";
+        window.location.reload();
+      } catch (error) {
+        message.textContent = error.message;
+        message.className = "edit-error";
+        playSfx("error");
+      }
     }
 
     function saveParentEmail() {
@@ -5949,9 +6179,20 @@
     document.getElementById("openParentPayTransferBtn").addEventListener("click", openParentPayTransfer);
     document.getElementById("openParentTicketGiftBtn").addEventListener("click", openParentTicketGift);
     document.getElementById("openParentEmailSettingsBtn").addEventListener("click", openParentEmailSettings);
+    document.getElementById("openBackupRestoreBtn").addEventListener("click", openBackupRestore);
+    document.getElementById("openCloudMappingBtn").addEventListener("click", openCloudMapping);
     document.getElementById("parentRewardBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentPayTransferBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentEmailBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("backupRestoreBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("cloudMappingBackBtn").addEventListener("click", openParentMenu);
+    document.getElementById("exportBackupBtn").addEventListener("click", exportBackup);
+    document.getElementById("selectBackupBtn").addEventListener("click", () => document.getElementById("backupFileInput").click());
+    document.getElementById("backupFileInput").addEventListener("change", loadBackupFile);
+    document.getElementById("backupConfirmCheckbox").addEventListener("change", event => {
+      document.getElementById("executeRestoreBtn").disabled = !event.target.checked;
+    });
+    document.getElementById("executeRestoreBtn").addEventListener("click", executeBackupRestore);
     document.getElementById("saveParentEmailBtn").addEventListener("click", saveParentEmail);
     document.getElementById("confirmPayTransferBtn").addEventListener("click", executePayTransfer);
     document.getElementById("parentTicketGiftBackBtn").addEventListener("click", openParentMenu);

@@ -1,24 +1,50 @@
 # Backup and restore
 
-## 現在の状態
+## Backup format
 
-JSONバックアップ、JSON復元、export、importは未実装です。コード内にダウンロードBlob、FileReader、ファイル選択、復元画面、バックアップAPIはありません。
+親設定の「データ管理」からJSONを書き出します。時刻は `createdAt` とファイル名の両方でUTCを基準にします。
 
-## 未実装項目
+```json
+{
+  "format": "hapichike-backup",
+  "version": 1,
+  "createdAt": "2026-10-22T01:02:00.000Z",
+  "app": "hapichike",
+  "data": {
+    "kidsVegasCasino.v1": {},
+    "kidsVegasCasino.parentEmail.v1": "parent@example.com"
+  }
+}
+```
 
-- バックアップ対象の定義とスキーマversion
-- チケット、PAY、スターコイン、ハピチャンカードの書き出し
-- 親設定、名前、お手伝い候補・今日の状態、がんばりきろくの書き出し
-- 子ども別データ（元の子ども別構造自体が未実装）
-- 復元時のJSON構文・型・範囲・参照整合性バリデーション
-- 復元前の現状態退避
-- 部分復元、競合解決、復元取消
-- 別端末への移行、クラウド同期
+## Versioning
 
-## 現在保護されている範囲
+現在対応する形式はversion 1だけです。versionなしのlegacy JSONと、未知のfuture versionは自動変換せず拒否します。将来必要になった場合は別の明示的migration/import処理を用意します。
 
-起動時の `normalizeState` は不足項目の初期値補完と一部旧形式の正規化を行いますが、バックアップ／復元機能ではありません。正規化前データを退避せず、必要と判定すると同じlocalStorageキーへ保存し直します。
+## Included data
 
-## リスク
+対象は `kidsVegasCasino.v1` と `kidsVegasCasino.parentEmail.v1` の2キーだけです。主stateの子ども名、残高、PAY、ハピチャンカード、タスク、今日のタスク、履歴、音設定などを含みます。未知の安全な追加フィールドは保持し、forward compatibilityを確保します。親メールは個人情報なので、ファイルを安全な場所に保管してください。
 
-ブラウザデータ削除、オリジン変更、端末故障、誤操作で主キーが失われると、家庭で蓄積した残高・タスク・履歴を復旧する公式手段がありません。今後の優先課題ですが、実装時は既存キーを直接変更する前にversion付き形式、検証、復元前退避、後方互換を設計する必要があります。
+## Excluded secrets
+
+親用簡易パスワード、password、Supabase access/refresh token、Auth session、`STAGING_PARENT_*`、service roleなど、秘密情報に該当するキーは再帰的に除外します。対象2キー以外のlocalStorageは読み出さないため、Supabase SDKが保存するAuthキーも含みません。復元時の親用簡易パスワードはバックアップ値で置換せず、その端末の現在値を維持します。
+
+## Validation
+
+JSON構文、format、version、app、createdAt、dataと対象2キー、主state、残高とPAYの有限数値、既知の配列、task/today taskの最低限の型、音設定、親メール型を検証します。`NaN` / `Infinity` 相当と `__proto__` / `prototype` / `constructor` を拒否します。未知フィールド自体は拒否しません。
+
+## Restore preview
+
+ファイル選択だけでは書き込みません。日時、version、子ども名、チケット、スターコイン、3種PAY、ハピチャン、task/history件数、settings有無を `Current → Backup` で表示します。
+
+## Safety backup
+
+明示確認後、復元直前の対象データをversion 1 envelopeとして `kidsVegasCasino.restoreSafety.v1` に保存します。ここにも秘密情報は含めません。途中書き込みまたはreadback確認が失敗した場合、処理開始時のraw値を自動で書き戻します。
+
+## Local-only restore
+
+復元は対象localStorageキーへの書き込みとreadback確認だけを行います。`localStorage.clear()` は使わず、無関係なキーを変更しません。成功後に画面をreloadします。
+
+## Future Supabase sync interaction
+
+この復元は端末内データだけを対象とし、Supabase RPC、DB更新、initial import、event queue、sync metadataを一切呼びません。将来cloud syncを追加しても、復元したlocal snapshotを自動pushしてはいけません。明示的な比較・承認・importを別フローで設計します。

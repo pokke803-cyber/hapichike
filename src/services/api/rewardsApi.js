@@ -1,6 +1,6 @@
 import { requireSupabase, unwrap } from "./apiClient.js";
 
-export const getChildBalances = (childId) => unwrap(requireSupabase().from("child_balances").select("*").eq("child_id", childId).maybeSingle());
+export const getChildBalances = (childId) => unwrap(requireSupabase().from("child_balances").select("child_id, tickets, star_coins, sweets_pay, toy_pay, game_pay, happy_chance_cards").eq("child_id", childId).maybeSingle());
 
 function normalizeLogOptions(options) {
   if (typeof options === "string" || options === null) {
@@ -68,5 +68,25 @@ export function adjustHappyChance(childId, amount, options = null) {
     p_title: title,
     p_message: message,
     p_metadata: metadata,
+  });
+}
+
+export function importInitialHapichikeSnapshot(preview, options = {}) {
+  const balances = preview?.balances ?? {};
+  return rewardRpc("import_initial_hapichike_snapshot", {
+    p_child_id: preview?.child_id,
+    p_import_id: preview?.import_id,
+    p_import_version: preview?.import_version,
+    p_source_snapshot_hash: preview?.source_snapshot_hash,
+    p_tickets: balances.tickets,
+    p_star_coins: balances.star_coins,
+    p_sweets_pay: balances.sweets_pay,
+    p_toy_pay: balances.toy_pay,
+    p_game_pay: balances.game_pay,
+    p_happy_chance_cards: balances.happy_chance_cards,
+    p_backup_created_at: preview?.backup_created_at,
+    p_parent_approved: preview?.parent_approved,
+    p_title: options.title ?? "初回データ移行",
+    p_metadata: options.metadata ?? {},
   });
 }

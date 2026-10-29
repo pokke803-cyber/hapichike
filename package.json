@@ -6,7 +6,8 @@
   "scripts": {
     "build": "vite build --configLoader runner",
     "dev": "vite",
-    "start": "vite"
+    "start": "vite",
+    "test": "node --test tests/*.test.cjs"
   },
   "keywords": [
     "static-site",

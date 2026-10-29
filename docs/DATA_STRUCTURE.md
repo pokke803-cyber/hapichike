@@ -118,7 +118,7 @@ AudioSettings = {
 - `parentPassword`: 初期 `"1234"`、主状態内に平文保存。
 - `parentEmail`: 主状態にも含まれるが、専用キー `kidsVegasCasino.parentEmail.v1` が優先。
 - `childName`: 名前だけ。複数プロフィール配列、子どもID、選択中IDはない。Supabase案の`children.id`への対応付けは未実装であり、自動移行してはいけない。
-- `backup data`: 未実装のため型なし。
+- `backup data`: `format: "hapichike-backup"`, `version: 1` のenvelope。対象2キーを `data` に格納し、親パスワードと認証・token類を除外する。詳細は `BACKUP_RESTORE.md`。
 - `happyChanceReserved`, `latestRouletteResult`, `activeCategory`, `activeBet` などはメモリのみで、再読込時に消えます。
 - Supabase Auth userは親だけを表す。子どもは`children.id`を持つプロフィールであり、Auth accountではない。
 - Supabase `parent_settings`には認証passwordもlocalStorageの`parentPassword`も保存しない。
