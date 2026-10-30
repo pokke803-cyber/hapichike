@@ -21,6 +21,7 @@
 - 親設定からのversion 1 JSONバックアップ、検証付きプレビュー、localStorage限定の復元、復元直前safety backup
 - レスポンシブ表示と `prefers-reduced-motion` 対応
 - `/parent` の親スマホ用 Supabase 閲覧専用ダッシュボード（Auth、家庭／子ども切替、残高、最近の履歴）
+- 親設定のクラウド連携に、backup・mapping・role・Cloud未初期化を確認する初回snapshot import UI（明示承認後の専用RPCのみ）
 
 ## 現在の画面構成とモード
 
@@ -43,7 +44,7 @@
 ## 現在の制約・未完成機能
 
 - 子どもの名前は表示ラベルであり、子ども別のプロフィール／残高／履歴分離はありません。
-- JSONバックアップ／復元は実装済みです。Supabase initial import、cloud sync、DBへの反映は未実装です。
+- JSONバックアップ／復元と、明示承認による1回限りのSupabase initial importは実装済みです。通常のcloud syncは未実装です。
 - 外部MP3は全て未配置です。Web Audioフォールバックで操作は継続できます。
 - お手伝い状態に `inProgress` の互換処理はありますが、現行UIに開始操作はなく、追加後は直接完了します。
 - 親パスワードの変更UIは確認できません。

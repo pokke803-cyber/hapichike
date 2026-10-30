@@ -1,6 +1,14 @@
 import { requireSupabase, unwrap } from "./apiClient.js";
 
 export const getChildBalances = (childId) => unwrap(requireSupabase().from("child_balances").select("child_id, tickets, star_coins, sweets_pay, toy_pay, game_pay, happy_chance_cards").eq("child_id", childId).maybeSingle());
+export const getChildAppSyncState = (childId, appId = "hapichike") => unwrap(
+  requireSupabase()
+    .from("child_app_sync_state")
+    .select("child_id, app_id, initial_import_id, initial_import_completed_at, import_version, source_snapshot_hash")
+    .eq("child_id", childId)
+    .eq("app_id", appId)
+    .maybeSingle(),
+);
 
 function normalizeLogOptions(options) {
   if (typeof options === "string" || options === null) {
@@ -86,7 +94,7 @@ export function importInitialHapichikeSnapshot(preview, options = {}) {
     p_happy_chance_cards: balances.happy_chance_cards,
     p_backup_created_at: preview?.backup_created_at,
     p_parent_approved: preview?.parent_approved,
-    p_title: options.title ?? "初回データ移行",
-    p_metadata: options.metadata ?? {},
+    p_title: options.title ?? preview?.title ?? "初回データ移行",
+    p_metadata: options.metadata ?? preview?.metadata ?? {},
   });
 }

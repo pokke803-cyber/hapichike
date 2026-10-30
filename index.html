@@ -1511,6 +1511,69 @@
     .cloud-compare-row.cloud-greater span:last-child { color: #a24c00; font-weight: 800; }
     .cloud-compare-row.missing span:last-child { color: #b42318; font-weight: 800; }
 
+    .cloud-import-card {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+      padding: 14px;
+      border: 2px solid #dce5ef;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .72);
+    }
+
+    .cloud-warning-list,
+    .cloud-readiness-list {
+      display: grid;
+      gap: 6px;
+      margin: 0;
+      padding-left: 20px;
+      font-size: .88rem;
+      line-height: 1.5;
+    }
+
+    .cloud-readiness-list {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .cloud-readiness-list .pass { color: #0b7a3e; }
+    .cloud-readiness-list .fail { color: #9b2c2c; }
+
+    .cloud-snapshot-preview { display: grid; gap: 6px; }
+
+    .cloud-snapshot-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: #f8fbff;
+      font-size: .82rem;
+    }
+
+    .cloud-approval-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .cloud-approval-list label {
+      display: flex;
+      grid-template-columns: auto 1fr;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .cloud-approval-list input { width: auto; margin-top: 3px; }
+
+    @media (max-width: 560px) {
+      .cloud-readiness-list { grid-template-columns: 1fr; }
+      .cloud-snapshot-row { grid-template-columns: 1fr; }
+    }
+
     .transfer-balance-row,
     .transfer-history-list {
       display: grid;
@@ -3024,8 +3087,8 @@
             端末データのバックアップ書き出し・確認・復元ができます。
           </button>
           <button class="parent-menu-button" type="button" id="openCloudMappingBtn">
-            <strong>☁️ クラウド連携（比較のみ）</strong>
-            local / cloud残高を読み取り比較し、子どもの対応付けを確認できます。
+            <strong>☁️ クラウド連携</strong>
+            local / cloud比較、子どもの対応付け、初回データ登録の準備を確認できます。
           </button>
         </div>
         <div class="parent-save-row">
@@ -3098,7 +3161,7 @@
         </div>
       </div>
       <div class="info-modal-body edit-form parent-panel hidden" id="cloudMappingPanel">
-        <p class="parent-note">Phase 1の確認画面です。SupabaseはSELECTだけを行い、残高・履歴・既存local stateを変更しません。</p>
+        <p class="parent-note">画面を開いた時はSupabaseの読取だけを行います。明示承認後に登録ボタンを押した場合だけ、専用RPCで初回登録します。</p>
         <div class="edit-error" id="cloudMappingStatus" role="status"></div>
         <div class="cloud-status-grid">
           <div class="cloud-status-item"><strong>Local child</strong><br><span id="cloudLocalChild">確認中</span></div>
@@ -3119,6 +3182,26 @@
         <div class="backup-preview" id="cloudBalanceComparison">
           <p class="parent-note">対応するクラウドChildを選んでください。</p>
         </div>
+        <section class="cloud-import-card" aria-labelledby="initialImportTitle">
+          <h4 id="initialImportTitle">初回snapshot import</h4>
+          <ul class="cloud-warning-list">
+            <li>初回移行は1回だけ実行できます。</li>
+            <li>クラウド側の既存残高または履歴がある場合は実行できません。</li>
+            <li>この処理は現在の端末データをクラウドへ初回登録します。</li>
+          </ul>
+          <div class="ticket-gift-summary" id="cloudBackupStatus">バックアップが必要です</div>
+          <ul class="cloud-readiness-list" id="cloudImportReadinessList" aria-label="初回import readiness"></ul>
+          <p class="parent-note" id="cloudImportReason"></p>
+          <div class="cloud-snapshot-preview" id="cloudSnapshotPreview"></div>
+          <fieldset class="cloud-approval-list" id="cloudImportApprovals" disabled>
+            <label><input id="approveCloudBackup" type="checkbox"><span>バックアップを作成しました</span></label>
+            <label><input id="approveCloudMapping" type="checkbox"><span>対応する子どもを確認しました</span></label>
+            <label><input id="approveCloudSnapshot" type="checkbox"><span>表示されている6残高を確認しました</span></label>
+            <label><input id="approveCloudOneTime" type="checkbox"><span>初回登録は1回だけであることを理解しました</span></label>
+          </fieldset>
+          <button class="primary" type="button" id="executeInitialImportBtn" disabled>このデータを初回クラウド登録する</button>
+          <div class="edit-error" id="cloudImportMessage" role="status"></div>
+        </section>
         <div class="parent-save-row">
           <button class="secondary" type="button" id="cloudMappingBackBtn">もどる</button>
         </div>
@@ -3224,6 +3307,7 @@
 
   <script type="module" src="/src/backup-core.js"></script>
   <script type="module" src="/src/cloud-mapping-core.js"></script>
+  <script type="module" src="/src/initial-import-core.js"></script>
   <script type="module" src="/src/cloud-mapping-ui.js"></script>
   <script>
     const storageKey = "kidsVegasCasino.v1";
@@ -3404,6 +3488,7 @@
     let parentTaskFormReturnToBulk = false;
     let parentTaskIconDraft = "🎟️";
     let parentTaskIconManuallySelected = false;
+    let openCloudMappingAfterParentUnlock = window.location.hash === "#parent-cloud";
     let ticketGiftDraftAmount = 1;
     let ticketGiftPending = null;
     let pendingBackupEnvelope = null;
@@ -4683,6 +4768,10 @@
 
     function closeParentSettings() {
       const shouldReturnToBulk = parentTaskFormReturnToBulk;
+      openCloudMappingAfterParentUnlock = false;
+      if (window.location.hash === "#parent-cloud") {
+        window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      }
       document.getElementById("parentSettingsModal").classList.add("hidden");
       document.getElementById("parentPasswordError").textContent = "";
       document.getElementById("parentRewardMessage").textContent = "";
@@ -4723,6 +4812,14 @@
         return;
       }
 
+      if (openCloudMappingAfterParentUnlock) {
+        openCloudMappingAfterParentUnlock = false;
+        if (window.location.hash === "#parent-cloud") {
+          window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+        }
+        openCloudMapping();
+        return;
+      }
       showParentPanel("parentMenuPanel");
     }
 
@@ -4866,6 +4963,9 @@
         link.click();
         link.remove();
         URL.revokeObjectURL(url);
+        const localChild = window.HapichikeCloudMapping.readLocalChild(localStorage);
+        window.HapichikeInitialImport.recordBackupMetadata(localStorage, envelope.createdAt, localChild.balances);
+        window.dispatchEvent(new CustomEvent("hapichike:backup-created"));
         message.textContent = "バックアップを書き出しました。安全な場所に保管してください。";
         message.className = "edit-error pay-message success";
       } catch (error) {
@@ -6248,6 +6348,7 @@
 
     setInterval(() => applyAutomaticDailyReset(true), 60000);
     render();
+    if (openCloudMappingAfterParentUnlock) openParentSettings();
   </script>
   <script type="module" src="/src/api-bootstrap.js"></script>
 </body>
