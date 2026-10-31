@@ -3309,6 +3309,7 @@
   <script type="module" src="/src/cloud-mapping-core.js"></script>
   <script type="module" src="/src/initial-import-core.js"></script>
   <script type="module" src="/src/cloud-mapping-ui.js"></script>
+  <script type="module" src="/src/online-rewards.js"></script>
   <script>
     const storageKey = "kidsVegasCasino.v1";
     const parentEmailStorageKey = "kidsVegasCasino.parentEmail.v1";
@@ -3491,6 +3492,7 @@
     let openCloudMappingAfterParentUnlock = window.location.hash === "#parent-cloud";
     let ticketGiftDraftAmount = 1;
     let ticketGiftPending = null;
+    let payTransferRunning = false;
     let pendingBackupEnvelope = null;
     let usePayAmount = { sweets: "", toy: "", game: "" };
     let audioUnlocked = false;
@@ -3731,6 +3733,36 @@
 
     function saveState() {
       localStorage.setItem(storageKey, JSON.stringify(state));
+    }
+
+    async function commitReward(options, localMutation) {
+      const bridge = window.HapichikeOnlineRewards;
+      if (!bridge?.mutate || !window.HapichikeOnlineRewardsCore) {
+        showToast("同期の準備ができませんでした。画面を読み直してね。");
+        playSfx("error");
+        return false;
+      }
+      const result = await bridge.mutate(options);
+      if (result?.duplicate) {
+        showToast("いま同期中だよ。少しまってね。");
+        return false;
+      }
+      if (result?.mode === "error") {
+        showToast(result.message || "同期できませんでした。もう一度ためしてね。");
+        playSfx("error");
+        return false;
+      }
+      if (result?.mode === "cloud") {
+        window.HapichikeOnlineRewardsCore.applyServerBalance(state, result.balance);
+      } else if (result?.mode === "local") {
+        localMutation();
+      } else {
+        showToast("同期状態を確認できませんでした。");
+        playSfx("error");
+        return false;
+      }
+      saveState();
+      return true;
     }
 
     function getDailyResetKey(date = new Date()) {
@@ -4107,7 +4139,7 @@
       state.starGiftHistory = [message, ...normalizeStarGiftHistory(state.starGiftHistory).filter(item => item !== message)].slice(0, 20);
     }
 
-    function giftStarCoin() {
+    async function giftStarCoin() {
       const input = document.getElementById("starGiftInput");
       const error = document.getElementById("starGiftError");
       const message = sanitizeStarGiftMessage(input.value);
@@ -4121,7 +4153,15 @@
       const ok = window.confirm(`この内容でスターを1つプレゼントしますか？\n\n「${message}」`);
       if (!ok) return;
 
-      state.starCoins += 1;
+      const committed = await commitReward({
+        type: "star_coin",
+        amount: 1,
+        source: "thank_you_star",
+        lockKey: "thank-you-star",
+        title: "ありがとうスター",
+        message
+      }, () => { state.starCoins += 1; });
+      if (!committed) return;
       saveStarGiftHistory(message);
       addHistory(`ありがとうスターをプレゼント。「${message}」 スターコイン +1`, "starCoinGift", {
         id: `star-gift-${Date.now()}`,
@@ -5127,12 +5167,20 @@
       document.getElementById("confirmTicketGiftBtn").disabled = true;
     }
 
-    function executeTicketGift() {
+    async function executeTicketGift() {
       if (!ticketGiftPending) return;
       const amount = Number(ticketGiftPending.amount);
       if (!Number.isInteger(amount) || amount < 1 || amount > 10) return;
       const reason = ticketGiftPending.reason || "親からのチケットプレゼント";
-      state.coins += amount;
+      const committed = await commitReward({
+        type: "ticket",
+        amount,
+        source: "parent_ticket_gift",
+        lockKey: "parent-ticket-gift",
+        title: reason,
+        message: reason
+      }, () => { state.coins += amount; });
+      if (!committed) return;
       const log = {
         id: `ticket-gift-${Date.now()}`,
         type: "ticketGift",
@@ -5197,7 +5245,11 @@
       `).join("");
     }
 
-    function executePayTransfer() {
+    async function executePayTransfer() {
+      if (payTransferRunning) {
+        showToast("PAYを同期中だよ。少しまってね。");
+        return;
+      }
       const fromId = document.getElementById("transferFromPay").value;
       const toId = document.getElementById("transferToPay").value;
       const amountValue = document.getElementById("transferAmountInput").value;
@@ -5229,8 +5281,37 @@
       const ok = window.confirm(`${fromPay.label} から ${toPay.label} へ ${amount}P 振り替えます。よろしいですか？`);
       if (!ok) return;
 
-      state.points[fromPay.category] = fromPoints - amount;
-      state.points[toPay.category] = (Number(state.points[toPay.category]) || 0) + amount;
+      payTransferRunning = true;
+      const debited = await commitReward({
+        type: "pay",
+        category: fromPay.id,
+        amount: -amount,
+        source: "pay_transfer_debit",
+        lockKey: `pay-transfer:${fromPay.id}:${toPay.id}`,
+        title: "PAY振り替え",
+        message: `${fromPay.label}から${toPay.label}へ振り替え`
+      }, () => { state.points[fromPay.category] = fromPoints - amount; });
+      if (!debited) {
+        payTransferRunning = false;
+        return;
+      }
+      const toPoints = Number(state.points[toPay.category]) || 0;
+      const credited = await commitReward({
+        type: "pay",
+        category: toPay.id,
+        amount,
+        source: "pay_transfer_credit",
+        lockKey: `pay-transfer:${fromPay.id}:${toPay.id}`,
+        title: "PAY振り替え",
+        message: `${fromPay.label}から${toPay.label}へ振り替え`
+      }, () => { state.points[toPay.category] = toPoints + amount; });
+      if (!credited) {
+        payTransferRunning = false;
+        render();
+        renderPayTransferPanel();
+        return;
+      }
+      payTransferRunning = false;
       state.transferHistory.unshift({
         id: `transfer-${Date.now()}`,
         date: todayString(),
@@ -5898,23 +5979,33 @@
       return { segment: segments[segments.length - 1], startWeight: totalWeight - segments[segments.length - 1].weight, totalWeight };
     }
 
-    function completeTask(taskId) {
+    async function completeTask(taskId) {
       const task = getTaskById(taskId);
       const today = getTodayEntry(taskId);
       if (!task || !today || isTaskCompleted(today)) return;
-      today.status = "done";
-      today.completedAt = todayString();
       today.ticketReward = Math.min(5, Math.max(1, Number(task.ticketReward) || 1));
       today.rewardType = getTaskRewardType(task);
       today.starCoinReward = Math.min(5, Math.max(1, Number(task.starCoinReward) || 1));
       if (!today.ticketGranted) {
-        if (today.rewardType === "starCoin") {
-          state.starCoins += today.starCoinReward;
-        } else {
-          state.coins += today.ticketReward;
-        }
+        const isStar = today.rewardType === "starCoin";
+        const amount = isStar ? today.starCoinReward : today.ticketReward;
+        const committed = await commitReward({
+          type: isStar ? "star_coin" : "ticket",
+          amount,
+          source: "task_completion",
+          lockKey: `task-completion:${taskId}`,
+          title: task.title,
+          message: "お手伝い完了",
+          metadata: { task_id: task.id }
+        }, () => {
+          if (isStar) state.starCoins += amount;
+          else state.coins += amount;
+        });
+        if (!committed) return;
         today.ticketGranted = true;
       }
+      today.status = "done";
+      today.completedAt = todayString();
       upsertTaskHistory(task, { completed: true });
       const rewardText = today.rewardType === "starCoin"
         ? `スターコイン +${today.starCoinReward}`
@@ -5951,14 +6042,24 @@
       showToast("今日のやることから外しました。");
     }
 
-    function exchangeStarCoins() {
+    async function exchangeStarCoins() {
       if (state.starCoins < 5) {
         showToast(`あと${5 - state.starCoins}枚でチケットに交換できるよ。`);
         playSfx("error");
         return;
       }
-      state.starCoins -= 5;
-      state.coins += 1;
+      const committed = await commitReward({
+        type: "star_exchange",
+        amount: 1,
+        source: "star_exchange",
+        lockKey: "star-exchange",
+        title: "スターコイン交換",
+        message: "スターコイン5枚をチケット1枚に交換"
+      }, () => {
+        state.starCoins -= 5;
+        state.coins += 1;
+      });
+      if (!committed) return;
       addHistory("スターコイン5枚をチケット1枚に交換しました。", "starCoinExchange", {
         starCoinsUsed: 5,
         ticketReward: 1
@@ -5981,7 +6082,7 @@
       showToast("今日のやることリストをリセットしました。");
     }
 
-    function spinWheel() {
+    async function spinWheel() {
       if (spinning) return;
       if (state.coins < activeBet) {
         playSfx("error");
@@ -5992,11 +6093,35 @@
       playSfx("rouletteStart");
       latestRouletteResult = null;
       const useHappyChanceBonus = happyChanceReserved && state.happyChanceCards > 0;
+      const ticketCommitted = await commitReward({
+        type: "ticket",
+        amount: -activeBet,
+        source: "roulette_bet",
+        lockKey: "roulette-spin",
+        title: "ルーレットBET",
+        message: `BET ${activeBet}`
+      }, () => { state.coins -= activeBet; });
+      if (!ticketCommitted) {
+        spinning = false;
+        render();
+        return;
+      }
       if (useHappyChanceBonus) {
-        state.happyChanceCards -= 1;
+        const cardCommitted = await commitReward({
+          type: "happy_chance",
+          amount: -1,
+          source: "roulette_card_reservation",
+          lockKey: "roulette-card-use",
+          title: "ハピチャンカード使用",
+          message: "ルーレット結果に+1P"
+        }, () => { state.happyChanceCards -= 1; });
+        if (!cardCommitted) {
+          spinning = false;
+          render();
+          return;
+        }
         happyChanceReserved = false;
       }
-      state.coins -= activeBet;
       updateStats();
       const segments = getCurrentSegments();
       const picked = weightedPick(segments);
@@ -6007,18 +6132,46 @@
       const currentMod = ((rotation % 360) + 360) % 360;
       rotation += 1440 + ((target - currentMod + 360) % 360);
       document.getElementById("wheel").style.transform = `rotate(${rotation}deg)`;
-      setTimeout(() => {
+      setTimeout(async () => {
         const category = categories[activeCategory];
         const before = state.points[activeCategory];
         const basePoints = picked.segment.type === "happyChance" ? 0 : picked.segment.points;
         const bonusPoints = useHappyChanceBonus ? 1 : 0;
         const totalPoints = basePoints + bonusPoints;
-        const after = before + totalPoints;
-        const actualChange = after - before;
-        state.points[activeCategory] = after;
         const ticketBonus = picked.segment.points === 0 && picked.segment.type !== "happyChance" ? 1 : 0;
-        if (ticketBonus) state.coins += ticketBonus;
-        if (picked.segment.type === "happyChance") state.happyChanceCards += 1;
+        if (totalPoints) {
+          await commitReward({
+            type: "pay",
+            category: payTypes.find(pay => pay.category === activeCategory)?.id,
+            amount: totalPoints,
+            source: "roulette_reward",
+            lockKey: "roulette-pay-reward",
+            title: `${category.label}ルーレット`,
+            message: `${totalPoints}P獲得`
+          }, () => { state.points[activeCategory] = before + totalPoints; });
+        }
+        if (ticketBonus) {
+          await commitReward({
+            type: "ticket",
+            amount: 1,
+            source: "roulette_zero_refund",
+            lockKey: "roulette-ticket-refund",
+            title: "ルーレット0P返却",
+            message: "チケット1枚返却"
+          }, () => { state.coins += 1; });
+        }
+        if (picked.segment.type === "happyChance") {
+          await commitReward({
+            type: "happy_chance",
+            amount: 1,
+            source: "roulette_happy_chance",
+            lockKey: "roulette-happy-chance",
+            title: "ハピチャン",
+            message: "ハピチャンカード1枚獲得"
+          }, () => { state.happyChanceCards += 1; });
+        }
+        const after = state.points[activeCategory];
+        const actualChange = after - before;
         latestRouletteResult = {
           category: activeCategory,
           used: false,
@@ -6062,12 +6215,34 @@
       }, 3700);
     }
 
-    function useHappyChanceCard() {
+    async function useHappyChanceCard() {
       if (!latestRouletteResult || latestRouletteResult.used || !latestRouletteResult.canUseCard || state.happyChanceCards <= 0) return;
       const categoryKey = latestRouletteResult.category;
       const category = categories[categoryKey];
-      state.happyChanceCards -= 1;
-      state.points[categoryKey] += 1;
+      const cardCommitted = await commitReward({
+        type: "happy_chance",
+        amount: -1,
+        source: "result_card_use",
+        lockKey: "result-card-use",
+        title: "ハピチャンカード使用",
+        message: `${category.label}に+1P`
+      }, () => { state.happyChanceCards -= 1; });
+      if (!cardCommitted) return;
+      const pay = payTypes.find(item => item.category === categoryKey);
+      const before = state.points[categoryKey];
+      const payCommitted = await commitReward({
+        type: "pay",
+        category: pay.id,
+        amount: 1,
+        source: "result_card_bonus",
+        lockKey: "result-card-use",
+        title: "ハピチャンボーナス",
+        message: `${category.label}に+1P`
+      }, () => { state.points[categoryKey] = before + 1; });
+      if (!payCommitted) {
+        render();
+        return;
+      }
       latestRouletteResult.used = true;
       latestRouletteResult.canUseCard = false;
       const resultBox = document.getElementById("luckyText");
@@ -6093,7 +6268,7 @@
       messageEl.className = `pay-message ${type}`;
     }
 
-    function usePayPoints(payId) {
+    async function usePayPoints(payId) {
       const pay = payTypes.find(item => item.id === payId);
       if (!pay) return;
       const amount = Number(usePayAmount[payId]);
@@ -6117,8 +6292,17 @@
         return;
       }
 
-      const nextPoints = current - amount;
-      state.points[pay.category] = nextPoints;
+      const committed = await commitReward({
+        type: "pay",
+        category: pay.id,
+        amount: -amount,
+        source: "reward_redemption",
+        lockKey: `pay-use:${pay.id}`,
+        title: `${pay.label}を使用`,
+        message: `${amount}P使用`
+      }, () => { state.points[pay.category] = current - amount; });
+      if (!committed) return;
+      const nextPoints = state.points[pay.category];
       addPayLog(pay, amount, current, nextPoints);
       usePayAmount[payId] = "";
       addHistory(`${pay.label}を${amount}Pつかいました。`);
