@@ -26,6 +26,84 @@ test("mappingなしとinitial import未完了はlocal-only", () => {
   assert.equal(core.evaluateCloudReady(ready({ syncState: { app_id: "hapichike", initial_import_completed_at: null } })).mode, "local");
 });
 
+test("Cloud-ready TicketはRPCを1回実行してからserver balanceを再取得する", async () => {
+  const calls = [];
+  const result = await core.executeRewardMutation({ type: "ticket", amount: 1, source: "task_completion" }, {
+    resolveMode: async () => {
+      calls.push("readiness");
+      return { mode: "cloud", reason: "ready", childId: "child-c" };
+    },
+    callRpc: async event => {
+      calls.push(`rpc:${event.child_id}:${event.amount}`);
+      return { tickets: 4 };
+    },
+    getChildBalances: async childId => {
+      calls.push(`balance:${childId}`);
+      return { tickets: 4, star_coins: 1, sweets_pay: 0, toy_pay: 0, game_pay: 0, happy_chance_cards: 0 };
+    },
+  });
+  assert.deepEqual(calls, ["readiness", "rpc:child-c:1", "balance:child-c"]);
+  assert.equal(result.mode, "cloud");
+  assert.equal(result.balance.tickets, 4);
+});
+
+test("Ticket二重操作はaction lock中のRPCを1回だけ実行する", async () => {
+  let releaseRpc;
+  let rpcCalls = 0;
+  const dependencies = {
+    resolveMode: async () => ({ mode: "cloud", reason: "ready", childId: "child-c" }),
+    callRpc: async () => {
+      rpcCalls += 1;
+      await new Promise(resolve => { releaseRpc = resolve; });
+    },
+    getChildBalances: async () => ({
+      tickets: 4, star_coins: 1, sweets_pay: 0, toy_pay: 0, game_pay: 0, happy_chance_cards: 0,
+    }),
+  };
+  const first = core.withActionLock("parent-ticket-gift", () => core.executeRewardMutation({ type: "ticket", amount: 1 }, dependencies));
+  await new Promise(resolve => setImmediate(resolve));
+  const second = await core.withActionLock("parent-ticket-gift", () => core.executeRewardMutation({ type: "ticket", amount: 1 }, dependencies));
+  assert.deepEqual(second, { duplicate: true });
+  assert.equal(rpcCalls, 1);
+  releaseRpc();
+  await first;
+});
+
+test("Ticket RPC失敗時はserver balanceを読まずlocal stateを変更しない", async () => {
+  const state = { coins: 3 };
+  let balanceReads = 0;
+  await assert.rejects(() => core.executeRewardMutation({ type: "ticket", amount: 1 }, {
+    resolveMode: async () => ({ mode: "cloud", reason: "ready", childId: "child-c" }),
+    callRpc: async () => { throw new Error("rpc failed"); },
+    getChildBalances: async () => { balanceReads += 1; },
+  }), /rpc failed/);
+  assert.equal(state.coins, 3);
+  assert.equal(balanceReads, 0);
+});
+
+test("TicketはRPC成功後のserver balance再取得失敗を成功扱いにしない", async () => {
+  const state = { coins: 3 };
+  await assert.rejects(() => core.executeRewardMutation({ type: "ticket", amount: 1 }, {
+    resolveMode: async () => ({ mode: "cloud", reason: "ready", childId: "child-c" }),
+    callRpc: async () => ({ tickets: 4 }),
+    getChildBalances: async () => { throw new Error("refresh failed"); },
+  }), /refresh failed/);
+  assert.equal(state.coins, 3);
+});
+
+test("mapping済みTicketのCloud-ready判定失敗はlocal fallbackしない", async () => {
+  await assert.rejects(() => core.executeRewardMutation({ type: "ticket", amount: 1 }, {
+    resolveMode: async () => ({ mode: "local", reason: "initial_import_incomplete" }),
+  }), /cloud readiness/);
+});
+
+test("mappingなしlegacy ChildのTicketはlocal-onlyを維持", async () => {
+  const result = await core.executeRewardMutation({ type: "ticket", amount: 1 }, {
+    resolveMode: async () => ({ mode: "local", reason: "mapping_missing" }),
+  });
+  assert.deepEqual(result, { mode: "local", reason: "mapping_missing" });
+});
+
 test("Cloud-readyはlogin・household・mapping・hapichike import完了を要求", () => {
   assert.deepEqual(core.evaluateCloudReady(ready()), { mode: "cloud", reason: "ready", childId: "child-c" });
   assert.equal(core.evaluateCloudReady(ready({ session: null })).reason, "session_missing");

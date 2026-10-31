@@ -73,18 +73,11 @@ async function mutate(options) {
   const key = options.lockKey || `${options.type}:${options.category || ""}:${options.source || ""}`;
   return core.withActionLock(key, async () => {
     try {
-      const readiness = await resolveMode();
-      if (readiness.mode === "local") return { mode: "local", reason: readiness.reason };
-      if (readiness.mode !== "cloud") throw new Error(readiness.reason);
-      const event = core.createRewardEvent({ ...options, child_id: readiness.childId });
-      const rpcBalance = await callRpc(event, options);
-      let balance;
-      try {
-        balance = await getChildBalances(readiness.childId);
-      } catch (refreshError) {
-        balance = core.normalizeServerBalance(rpcBalance);
-      }
-      return { mode: "cloud", event, balance: core.normalizeServerBalance(balance) };
+      return await core.executeRewardMutation(options, {
+        resolveMode,
+        callRpc,
+        getChildBalances,
+      });
     } catch (error) {
       return { mode: "error", error, message: safeMessage(error) };
     }

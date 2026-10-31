@@ -57,6 +57,22 @@
     return state;
   }
 
+  async function executeRewardMutation(options, dependencies) {
+    const readiness = await dependencies.resolveMode();
+    if (readiness.mode === "local") {
+      if (options.type === "ticket" && readiness.reason !== "mapping_missing") {
+        throw new Error("cloud readiness is unavailable");
+      }
+      return { mode: "local", reason: readiness.reason };
+    }
+    if (readiness.mode !== "cloud") throw new Error(readiness.reason);
+
+    const event = createRewardEvent({ ...options, child_id: readiness.childId }, dependencies.now);
+    await dependencies.callRpc(event, options);
+    const balance = await dependencies.getChildBalances(readiness.childId);
+    return { mode: "cloud", event, balance: normalizeServerBalance(balance) };
+  }
+
   async function withActionLock(key, action) {
     if (locks.has(key)) return { duplicate: true };
     locks.add(key);
@@ -73,6 +89,7 @@
     evaluateCloudReady,
     normalizeServerBalance,
     applyServerBalance,
+    executeRewardMutation,
     withActionLock,
   };
 });
