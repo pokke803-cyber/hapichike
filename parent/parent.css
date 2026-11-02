@@ -210,3 +210,22 @@ input:focus, select:focus { border-color: var(--rose); box-shadow: 0 0 0 4px rgb
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+.runtime-card {
+  margin: 18px 0;
+  padding: 20px;
+  border: 1px solid var(--line, #eadfca);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.runtime-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.runtime-grid div { padding: 10px 12px; border-radius: 12px; background: #fff9ed; }
+.runtime-grid dt { color: #806f5f; font-size: 0.75rem; }
+.runtime-grid dd { margin: 4px 0 0; font-weight: 700; overflow-wrap: anywhere; }

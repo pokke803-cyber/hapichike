@@ -66,6 +66,22 @@
         </header>
 
         <div id="dashboardError" class="notice notice-error" role="alert" hidden></div>
+        <section class="runtime-card" aria-labelledby="runtimeTitle">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">CONNECTION</p>
+              <h2 id="runtimeTitle">接続・この端末の状態</h2>
+            </div>
+            <button id="refreshRuntimeButton" class="secondary-button" type="button">更新</button>
+          </div>
+          <dl class="runtime-grid">
+            <div><dt>ログイン</dt><dd id="authStatus"></dd></div>
+            <div><dt>接続</dt><dd id="connectionStatus"></dd></div>
+            <div><dt>Local v1</dt><dd id="localV1Status"></dd></div>
+            <div><dt>Local v2</dt><dd id="localV2Status"></dd></div>
+            <div><dt>Local profile</dt><dd id="localProfileStatus"></dd></div>
+          </dl>
+        </section>
         <section id="householdEmpty" class="empty-card" hidden>
           <span aria-hidden="true">🏠</span>
           <h2>所属する家庭がありません</h2>
@@ -87,6 +103,11 @@
           <section id="childrenEmpty" class="empty-card" hidden>
             <span aria-hidden="true">👧</span>
             <h2>子どもがまだ登録されていません</h2>
+          </section>
+
+          <section id="childSelectionEmpty" class="empty-card" hidden>
+            <span aria-hidden="true">👆</span>
+            <h2>表示する子どもを選んでください</h2>
           </section>
 
           <div id="childContent" hidden>
@@ -115,6 +136,7 @@
                 </div>
                 <p id="balanceUpdated" class="updated-text"></p>
               </div>
+              <button id="refreshChildButton" class="text-button" type="button">残高と履歴を更新</button>
               <div id="balanceLoading" class="inline-loading" hidden>残高を読み込み中...</div>
               <div id="balanceEmpty" class="notice" hidden>残高データがまだありません。</div>
               <div id="balanceGrid" class="balance-grid"></div>

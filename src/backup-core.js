@@ -211,5 +211,5 @@
     return `hapichike-backup-${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}-${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}.json`;
   }
 
-  return { FORMAT, VERSION, APP, STORAGE_KEY, EMAIL_KEY, SAFETY_KEY, createBackup, parseBackup, validateEnvelope, preview, restore, filename, stripSecrets };
+  return { FORMAT, VERSION, APP, STORAGE_KEY, EMAIL_KEY, SAFETY_KEY, parseMainState, createBackup, parseBackup, validateEnvelope, preview, restore, filename, stripSecrets };
 });
