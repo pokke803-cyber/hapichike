@@ -9,9 +9,16 @@ if (!hasSupabaseConfig) {
   console.warn("[HAPICHIKE] Supabase is not configured; continuing in localStorage-only mode.");
 }
 
-export const supabase = hasSupabaseConfig
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+let initializedClient = null;
+if (hasSupabaseConfig) {
+  try {
+    initializedClient = createClient(supabaseUrl, supabaseAnonKey);
+  } catch {
+    console.warn("[HAPICHIKE] Supabase client initialization failed.");
+  }
+}
+
+export const supabase = initializedClient;
 
 export function isSupabaseConfigured() {
   return hasSupabaseConfig;

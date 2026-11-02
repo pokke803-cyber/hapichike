@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 const { createParentRuntime } = require("../src/parent/parent-runtime.js");
 
 const householdA = { id: "household-a", name: "A" };
@@ -19,6 +20,7 @@ function setup(options = {}) {
     authApi: {
       getParentSession: async () => {
         calls.push("auth");
+        if (options.authImpl) return options.authImpl();
         if (options.authError) throw new Error("auth SQL token");
         return { session: options.session === undefined ? { user: { id: "parent-a", email: "a@example.test" } } : options.session };
       },
@@ -27,6 +29,7 @@ function setup(options = {}) {
     householdsApi: {
       getCurrentHouseholds: async userId => {
         calls.push(`households:${userId}`);
+        if (options.householdImpl) return options.householdImpl(userId);
         if (options.householdError) throw new Error("household failure");
         return options.households ?? [householdA];
       },
@@ -34,6 +37,7 @@ function setup(options = {}) {
     childrenApi: {
       getChildrenByHousehold: async householdId => {
         calls.push(`children:${householdId}`);
+        if (options.childrenImpl) return options.childrenImpl(householdId);
         if (options.childError) throw new Error("child failure");
         return options.children ?? (householdId === "household-b" ? [childB] : [childA, childC]);
       },
@@ -50,7 +54,11 @@ function setup(options = {}) {
       getRecentRewardLogs: async childId => { calls.push(`logs:${childId}`); return [{ id: `log-${childId}` }]; },
     },
     storage: {
-      getItem(key) { calls.push(`get:${key}`); return storageValues[key] ?? null; },
+      getItem(key) {
+        calls.push(`get:${key}`);
+        if (options.storageErrorKeys?.includes(key)) throw new Error("storage read failure");
+        return storageValues[key] ?? null;
+      },
       setItem(...args) { writes.push(["setItem", ...args]); },
       removeItem(...args) { writes.push(["removeItem", ...args]); },
       clear(...args) { writes.push(["clear", ...args]); },
@@ -67,6 +75,7 @@ function setup(options = {}) {
         return value;
       },
     },
+    requestTimeoutMs: options.requestTimeoutMs ?? 100,
   };
   return { runtime: createParentRuntime(dependencies), calls, writes, emitAuth: session => authCallback?.("SIGNED_IN", session) };
 }
@@ -180,4 +189,98 @@ test("P1 adapterはlocalStorage write 0、Cloud write API/RPC参照0", async () 
   assert.doesNotMatch(source, /createHousehold|createChild|addTicket|importInitial/i);
   const uiSource = fs.readFileSync(path.join(__dirname, "../parent/parent.js"), "utf8");
   assert.doesNotMatch(uiSource, /import \* as (?:householdsApi|childrenApi|rewardsApi|historyApi)/);
+});
+
+test("全体loadingはsigned_out/auth・Household・Child error/emptyとLocal異常でも必ず終了する", async () => {
+  const cases = [
+    [{ session: null }, "signed_out"],
+    [{ authError: true }, "error"],
+    [{ households: [] }, "empty"],
+    [{ householdError: true }, "error"],
+    [{ children: [] }, "empty"],
+    [{ childError: true }, "error"],
+    [{ storageValues: {} }, "success"],
+    [{ storageValues: { "kidsVegasCasino.v1": "{", "kidsVegasCasino.v2": "{" } }, "success"],
+    [{ storageErrorKeys: ["kidsVegasCasino.v1", "kidsVegasCasino.v2"] }, "success"],
+  ];
+  for (const [options, expected] of cases) {
+    const runtime = setup(options).runtime;
+    await runtime.initializeParentRuntime();
+    assert.equal(runtime.getState().runtime.status, expected);
+    assert.notEqual(runtime.getState().runtime.status, "loading");
+  }
+  const localError = setup({ storageErrorKeys: ["kidsVegasCasino.v1", "kidsVegasCasino.v2"] }).runtime;
+  await localError.initializeParentRuntime();
+  assert.equal(localError.getState().local.legacyStatus, "error");
+  assert.equal(localError.getState().local.v2Status, "error");
+});
+
+test("Parent A/B正常初期化とdetails error分離は全体loadingを残さない", async () => {
+  const parentA = setup().runtime;
+  await parentA.initializeParentRuntime();
+  assert.equal(parentA.getState().runtime.status, "success");
+  assert.deepEqual(parentA.getState().cloudChildren.items.map(item => item.id), ["child-c", "child-a"]);
+
+  const parentB = setup({
+    session: { user: { id: "parent-b", email: "b@example.test" } },
+    households: [householdB],
+  }).runtime;
+  await parentB.initializeParentRuntime();
+  assert.equal(parentB.getState().runtime.status, "success");
+  assert.deepEqual(parentB.getState().cloudChildren.items.map(item => item.id), ["child-b"]);
+
+  const detailsFailure = setup({ detailsError: true }).runtime;
+  await detailsFailure.initializeParentRuntime();
+  await detailsFailure.selectViewedCloudChild("child-a");
+  assert.equal(detailsFailure.getState().runtime.status, "success");
+  assert.equal(detailsFailure.getState().viewedChildData.status, "error");
+  assert.equal(detailsFailure.getState().cloudChildren.status, "ready");
+});
+
+test("initialize二重実行・retry・未解決Promiseでstale結果やloadingを残さない", async () => {
+  let resolveFirst;
+  let authCalls = 0;
+  const firstSession = new Promise(resolve => { resolveFirst = resolve; });
+  const { runtime } = setup({
+    authImpl: () => (++authCalls === 1
+      ? firstSession
+      : Promise.resolve({ session: { user: { id: "parent-b", email: "b@example.test" } } })),
+    householdImpl: userId => userId === "parent-b" ? [householdB] : [householdA],
+  });
+  const staleInitialize = runtime.initializeParentRuntime();
+  const currentInitialize = runtime.initializeParentRuntime();
+  await currentInitialize;
+  resolveFirst({ session: { user: { id: "parent-a", email: "a@example.test" } } });
+  await staleInitialize;
+  assert.equal(runtime.getState().auth.userId, "parent-b");
+  assert.deepEqual(runtime.getState().cloudChildren.items.map(item => item.id), ["child-b"]);
+  assert.equal(runtime.getState().runtime.status, "success");
+
+  let retryCalls = 0;
+  const retryRuntime = setup({ authImpl: () => {
+    retryCalls += 1;
+    if (retryCalls === 1) throw new Error("temporary auth failure");
+    return { session: { user: { id: "parent-a" } } };
+  } }).runtime;
+  await retryRuntime.initializeParentRuntime();
+  assert.equal(retryRuntime.getState().runtime.status, "error");
+  await retryRuntime.initializeParentRuntime();
+  assert.equal(retryRuntime.getState().runtime.status, "success");
+
+  const timeoutRuntime = setup({ authImpl: () => new Promise(() => {}), requestTimeoutMs: 5 }).runtime;
+  await timeoutRuntime.initializeParentRuntime();
+  assert.equal(timeoutRuntime.getState().runtime.status, "error");
+});
+
+test("browser bundle用UMD分岐はrequire未定義でもCommonJS側へ入らない", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../src/parent/parent-runtime.js"), "utf8");
+  const context = {
+    globalThis: { HapichikeParentRuntimeCore: require("../src/parent/parent-runtime-core.js") },
+    module: { exports: {} },
+    queueMicrotask,
+    setTimeout,
+    clearTimeout,
+  };
+  vm.runInNewContext(source, context);
+  assert.equal(typeof context.module.exports.createParentRuntime, "function");
 });

@@ -33,6 +33,7 @@
           </label>
           <button id="showPasswordResetButton" class="text-button" type="button">パスワードを設定・再設定する</button>
           <p id="loginError" class="form-error" role="alert"></p>
+          <button id="loginRetryButton" class="secondary-button full-width-button" type="button" hidden>再試行</button>
           <button id="loginButton" class="primary-button" type="submit">ログイン</button>
         </form>
         <div id="passwordResetPanel" hidden>
@@ -77,8 +78,12 @@
           <dl class="runtime-grid">
             <div><dt>ログイン</dt><dd id="authStatus"></dd></div>
             <div><dt>接続</dt><dd id="connectionStatus"></dd></div>
+            <div><dt>家庭</dt><dd id="householdStatus"></dd></div>
+            <div><dt>子ども一覧</dt><dd id="childrenStatus"></dd></div>
             <div><dt>Local v1</dt><dd id="localV1Status"></dd></div>
             <div><dt>Local v2</dt><dd id="localV2Status"></dd></div>
+            <div><dt>詳細</dt><dd id="detailsStatus"></dd></div>
+            <div><dt>初期化</dt><dd id="finalStatus"></dd></div>
             <div><dt>Local profile</dt><dd id="localProfileStatus"></dd></div>
           </dl>
         </section>

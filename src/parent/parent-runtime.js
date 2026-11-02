@@ -1,5 +1,5 @@
 (function (root, factory) {
-  const core = typeof module === "object" && module.exports
+  const core = typeof module === "object" && module.exports && typeof require === "function"
     ? require("./parent-runtime-core.js")
     : root.HapichikeParentRuntimeCore;
   const api = factory(core);
@@ -16,6 +16,7 @@
     const {
       authApi, householdsApi, childrenApi, rewardsApi, historyApi,
       storage = null, parsers = {}, queueTask = queueMicrotask,
+      requestTimeoutMs = 15000,
     } = dependencies;
     let state = core.createParentRuntimeState();
     let parentEmail = "";
@@ -45,6 +46,32 @@
       detailGeneration += 1;
     }
 
+    function withTimeout(value) {
+      if (!(requestTimeoutMs > 0)) return Promise.resolve(value);
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("parent runtime read timeout")), requestTimeoutMs);
+        Promise.resolve(value).then(
+          result => { clearTimeout(timer); resolve(result); },
+          error => { clearTimeout(timer); reject(error); },
+        );
+      });
+    }
+
+    function finalRuntimeStatus() {
+      if (state.auth.status === "signed_out") return "signed_out";
+      if (state.auth.status === "error" || state.households.status === "error" || state.cloudChildren.status === "error") return "error";
+      if (state.households.status === "empty" || state.cloudChildren.status === "empty") return "empty";
+      if (state.auth.status === "signed_in" && state.households.status === "ready"
+        && (!state.selectedHouseholdId || state.cloudChildren.status === "ready")) return "success";
+      return "error";
+    }
+
+    function finishInitialization(generation) {
+      if (generation !== authGeneration || state.runtime.status !== "loading") return;
+      const status = finalRuntimeStatus();
+      update(core.applyRuntimeStatus(state, status));
+    }
+
     function subscribe(listener) {
       listeners.add(listener);
       listener(snapshot());
@@ -54,17 +81,19 @@
     async function readLocalIdentityState() {
       let legacyRaw = null;
       let v2Raw = null;
+      let legacyError = false;
+      let v2Error = false;
       try {
         legacyRaw = storage?.getItem(V1_KEY) ?? null;
       } catch {
-        legacyRaw = "__storage_read_failed__";
+        legacyError = true;
       }
       try {
         v2Raw = storage?.getItem(V2_KEY) ?? null;
       } catch {
-        v2Raw = "__storage_read_failed__";
+        v2Error = true;
       }
-      const localState = core.readLocalIdentityState({ legacyRaw, v2Raw }, parsers);
+      const localState = core.readLocalIdentityState({ legacyRaw, v2Raw, legacyError, v2Error }, parsers);
       update(core.applyLocalIdentityState(state, localState));
       return localState;
     }
@@ -75,7 +104,7 @@
       detailGeneration += 1;
       update(core.startCloudChildrenLoad(state));
       try {
-        const children = await childrenApi.getChildrenByHousehold(state.selectedHouseholdId);
+        const children = await withTimeout(childrenApi.getChildrenByHousehold(state.selectedHouseholdId));
         if (generation !== childGeneration) return snapshot();
         const sorted = [...(children ?? [])].sort((a, b) =>
           (Number(a.display_order) || 0) - (Number(b.display_order) || 0));
@@ -90,7 +119,7 @@
     async function loadHouseholds(userId, generation) {
       update(core.startHouseholdLoad(state));
       try {
-        const households = await householdsApi.getCurrentHouseholds(userId);
+        const households = await withTimeout(householdsApi.getCurrentHouseholds(userId));
         if (generation !== authGeneration) return;
         update(core.applyHouseholdsLoaded(state, households ?? []));
         if (state.selectedHouseholdId) await refreshCloudChildren();
@@ -100,26 +129,36 @@
       }
     }
 
-    async function applySession(session) {
-      const generation = ++authGeneration;
+    async function applySession(session, generation = ++authGeneration) {
       invalidateCloudRequests();
-      const user = session?.user ?? null;
-      parentEmail = typeof user?.email === "string" ? user.email : "";
-      if (!user?.id) {
-        update(core.applySignedOut(state));
-        await readLocalIdentityState();
+      if (state.runtime.status !== "loading") update(core.applyRuntimeStatus(state, "loading"));
+      try {
+        const user = session?.user ?? null;
+        parentEmail = typeof user?.email === "string" ? user.email : "";
+        if (!user?.id) {
+          update(core.applySignedOut(state));
+          await readLocalIdentityState();
+          return snapshot();
+        }
+        update(core.applySignedIn(state, user.id));
+        await loadHouseholds(user.id, generation);
+        if (generation === authGeneration) await readLocalIdentityState();
         return snapshot();
+      } catch {
+        if (generation === authGeneration) {
+          update(core.applyAuthError(state));
+          await readLocalIdentityState();
+        }
+        return snapshot();
+      } finally {
+        finishInitialization(generation);
       }
-      update(core.applySignedIn(state, user.id));
-      await loadHouseholds(user.id, generation);
-      if (generation === authGeneration) await readLocalIdentityState();
-      return snapshot();
     }
 
     function ensureAuthListener() {
       if (authSubscription || typeof authApi.onParentAuthStateChange !== "function") return;
       const result = authApi.onParentAuthStateChange((_event, session) => {
-        queueTask(() => { void applySession(session); });
+        queueTask(() => { void applySession(session).catch(() => {}); });
       });
       authSubscription = result?.data?.subscription ?? result?.subscription ?? result ?? null;
     }
@@ -132,14 +171,16 @@
       parentEmail = "";
       emit();
       try {
-        const result = await authApi.getParentSession();
+        const result = await withTimeout(authApi.getParentSession());
         if (generation !== authGeneration) return snapshot();
-        return applySession(result?.session ?? null);
+        return await applySession(result?.session ?? null, generation);
       } catch {
         if (generation !== authGeneration) return snapshot();
         update(core.applyAuthError(state));
         await readLocalIdentityState();
         return snapshot();
+      } finally {
+        finishInitialization(generation);
       }
     }
 
@@ -167,10 +208,10 @@
       const generation = ++detailGeneration;
       update(core.startViewedChildDataLoad(state));
       try {
-        const [balance, logs] = await Promise.all([
+        const [balance, logs] = await withTimeout(Promise.all([
           rewardsApi.getChildBalances(childId),
           historyApi.getRecentRewardLogs(childId, 20),
-        ]);
+        ]));
         if (generation !== detailGeneration || childId !== state.parentViewedSupabaseChildId) return snapshot();
         update(core.applyViewedChildData(state, childId, balance, logs ?? []));
       } catch {

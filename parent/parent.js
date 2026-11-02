@@ -14,12 +14,13 @@ import "../src/parent/parent-runtime.js";
 
 const elements = Object.fromEntries([
   "configView", "loginView", "loadingView", "dashboardView", "loginForm", "emailInput", "passwordInput",
-  "loginButton", "loginError", "logoutButton", "parentEmail", "showPasswordResetButton", "passwordResetPanel",
+  "loginButton", "loginError", "loginRetryButton", "logoutButton", "parentEmail", "showPasswordResetButton", "passwordResetPanel",
   "passwordResetForm", "resetEmailInput", "passwordResetMessage", "passwordResetButton", "showLoginButton",
   "dashboardError", "householdEmpty", "dashboardContent", "householdField", "householdSelect", "childTabs",
   "childrenEmpty", "childSelectionEmpty", "childContent", "selectedChildName", "balanceLoading", "balanceEmpty",
   "balanceGrid", "balanceUpdated", "choresList", "logsLoading", "logsList", "refreshRuntimeButton",
-  "refreshChildButton", "authStatus", "connectionStatus", "localV1Status", "localV2Status", "localProfileStatus",
+  "refreshChildButton", "authStatus", "connectionStatus", "householdStatus", "childrenStatus", "localV1Status", "localV2Status",
+  "detailsStatus", "finalStatus", "localProfileStatus",
 ].map(id => [id, document.getElementById(id)]));
 
 const runtime = globalThis.HapichikeParentRuntime.createParentRuntime({
@@ -70,15 +71,20 @@ function setDashboardError(code = null) {
 }
 
 function statusLabel(status) {
-  return ({ signed_in: "ログイン済み", signed_out: "未ログイン", loading: "確認中", error: "エラー",
-    ready: "接続済み", idle: "待機中", success: "有効", missing: "なし", invalid: "無効" })[status] ?? status;
+  return ({ signed_in: "ログイン済み", signed_out: "未ログイン", loading: "確認中",
+    ready: "成功", idle: "待機中", not_loaded: "対象なし", success: "成功", empty: "0件",
+    missing: "なし", invalid: "無効", error: "エラー" })[status] ?? status;
 }
 
 function renderRuntimeStatus(state) {
   elements.authStatus.textContent = statusLabel(state.auth.status);
   elements.connectionStatus.textContent = statusLabel(state.connection.status);
+  elements.householdStatus.textContent = statusLabel(state.households.status);
+  elements.childrenStatus.textContent = statusLabel(state.cloudChildren.status);
   elements.localV1Status.textContent = statusLabel(state.local.legacyStatus);
   elements.localV2Status.textContent = statusLabel(state.local.v2Status);
+  elements.detailsStatus.textContent = statusLabel(state.viewedChildData.status);
+  elements.finalStatus.textContent = statusLabel(state.runtime.status);
   elements.localProfileStatus.textContent = `${state.local.profileCount ?? 0}件${state.local.activeLocalChildExists ? "・選択あり" : ""}`;
 }
 
@@ -242,7 +248,8 @@ function render(state) {
   if (state.auth.status === "signed_out" || state.auth.status === "error") {
     showLoginMode();
     showOnly(elements.loginView);
-    if (state.auth.errorCode) elements.loginError.textContent = errorMessages[state.auth.errorCode];
+    elements.loginError.textContent = state.auth.errorCode ? (errorMessages[state.auth.errorCode] ?? "データの読み込みに失敗しました。") : "";
+    elements.loginRetryButton.hidden = state.auth.status !== "error";
     return;
   }
   showOnly(elements.dashboardView);
@@ -271,6 +278,7 @@ elements.loginForm.addEventListener("submit", async event => {
   catch (error) { elements.loginError.textContent = friendlyError(error, "ログインできませんでした。時間をおいてもう一度お試しください。"); }
   finally { elements.loginButton.disabled = false; elements.loginButton.textContent = "ログイン"; }
 });
+elements.loginRetryButton.addEventListener("click", () => { void runtime.initializeParentRuntime(); });
 
 elements.showPasswordResetButton.addEventListener("click", () => {
   elements.resetEmailInput.value = elements.emailInput.value.trim();
@@ -307,8 +315,7 @@ elements.childTabs.addEventListener("click", event => {
   if (button && button.dataset.childId !== runtime.getState().parentViewedSupabaseChildId) void runtime.selectViewedCloudChild(button.dataset.childId);
 });
 elements.refreshRuntimeButton.addEventListener("click", async () => {
-  await runtime.readLocalIdentityState();
-  if (runtime.getState().selectedHouseholdId) await runtime.refreshCloudChildren();
+  await runtime.initializeParentRuntime();
 });
 elements.refreshChildButton.addEventListener("click", () => { void runtime.refreshViewedChildData(); });
 

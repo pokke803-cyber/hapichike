@@ -8,7 +8,8 @@
   const AUTH_STATUSES = Object.freeze(["loading", "signed_out", "signed_in", "error"]);
   const HOUSEHOLD_STATUSES = Object.freeze(["not_loaded", "loading", "ready", "empty", "error"]);
   const CLOUD_CHILD_STATUSES = Object.freeze(["not_loaded", "loading", "ready", "empty", "error"]);
-  const LOCAL_STATUSES = Object.freeze(["success", "missing", "invalid"]);
+  const LOCAL_STATUSES = Object.freeze(["loading", "success", "missing", "invalid", "error"]);
+  const RUNTIME_STATUSES = Object.freeze(["loading", "success", "empty", "signed_out", "error"]);
   const ERROR_CODES = Object.freeze({
     AUTH_REQUIRED: "AUTH_REQUIRED",
     AUTH_LOAD_FAILED: "AUTH_LOAD_FAILED",
@@ -45,6 +46,7 @@
 
   function createParentRuntimeState() {
     return {
+      runtime: { status: "loading", errorCode: null },
       auth: { status: "loading", userId: null, errorCode: null },
       connection: { status: "idle", errorCode: null },
       households: { status: "not_loaded", items: [], errorCode: null },
@@ -55,14 +57,19 @@
       viewedChildBalance: null,
       viewedChildRewardLogs: [],
       local: {
-        legacyStatus: "missing",
-        v2Status: "missing",
+        legacyStatus: "loading",
+        v2Status: "loading",
         activeLocalChildKey: null,
         activeLocalChildExists: false,
         profileCount: 0,
         errorCodes: [],
       },
     };
+  }
+
+  function applyRuntimeStatus(state, status, errorCode = null) {
+    if (!RUNTIME_STATUSES.includes(status)) throw new ParentRuntimeContractError(ERROR_CODES.CONNECTION_FAILED);
+    return { ...state, runtime: { status, errorCode: status === "error" ? (errorCode ?? ERROR_CODES.CONNECTION_FAILED) : null } };
   }
 
   function clearCloudScope(state) {
@@ -282,7 +289,9 @@
       profileCount: 0,
       errorCodes: [],
     };
-    if (rawState.legacyRaw !== null && rawState.legacyRaw !== undefined && rawState.legacyRaw !== "") {
+    if (rawState.legacyError) result.legacyStatus = "error";
+    if (rawState.v2Error) result.v2Status = "error";
+    if (!rawState.legacyError && rawState.legacyRaw !== null && rawState.legacyRaw !== undefined && rawState.legacyRaw !== "") {
       try {
         (parsers.parseLegacy || defaultParseLegacy)(rawState.legacyRaw);
         result.legacyStatus = "success";
@@ -291,7 +300,7 @@
         result.errorCodes.push(ERROR_CODES.LOCAL_V1_INVALID);
       }
     }
-    if (rawState.v2Raw !== null && rawState.v2Raw !== undefined && rawState.v2Raw !== "") {
+    if (!rawState.v2Error && rawState.v2Raw !== null && rawState.v2Raw !== undefined && rawState.v2Raw !== "") {
       try {
         const store = (parsers.parseV2 || defaultParseV2)(rawState.v2Raw);
         result.v2Status = "success";
@@ -357,6 +366,7 @@
     RUNTIME_ACTIONS,
     ParentRuntimeContractError,
     createParentRuntimeState,
+    applyRuntimeStatus,
     applySignedOut,
     applySignedIn,
     applyAuthError,
