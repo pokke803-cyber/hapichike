@@ -64,6 +64,56 @@ test("apply guard requires selection, current backup, preview and all approvals"
   assert.equal(ui.canApply({ ...ready, completed: true }), false);
 });
 
+test("zero households has no selected household and no select", () => {
+  assert.deepEqual(ui.householdSelection([]), {
+    householdId: null,
+    showSelect: false,
+    options: [],
+  });
+});
+
+test("one household auto-selects Household A", () => {
+  const one = ui.householdSelection([{ id: "household-a", name: "Household A" }]);
+  assert.equal(one.householdId, "household-a");
+});
+
+test("two households show a populated select", () => {
+  const two = ui.householdSelection([
+    { id: "household-a", name: "Household A" },
+    { id: "household-b", name: "Household B" },
+  ]);
+  assert.equal(two.householdId, "household-a");
+  assert.equal(two.showSelect, true);
+  assert.deepEqual(two.options.map(option => option.value), ["household-a", "household-b"]);
+});
+
+test("one household uses Household A id to load children", async () => {
+  const household = ui.householdSelection([{ id: "household-a", name: "Household A" }]);
+  const calls = [];
+  await ui.loadChildrenForHousehold(async householdId => {
+    calls.push(householdId);
+    return [];
+  }, household.householdId);
+  assert.deepEqual(calls, ["household-a"]);
+});
+
+test("one household does not show an empty household select", () => {
+  const household = ui.householdSelection([{ id: "household-a", name: "Household A" }]);
+  assert.equal(household.showSelect, false);
+  assert.deepEqual(household.options, [{ value: "household-a", label: "Household A" }]);
+});
+
+test("Child A and Child C become child options", () => {
+  assert.deepEqual(ui.childSelectOptions([
+    { id: "child-a", name: "Child A" },
+    { id: "child-c", name: "Child C" },
+  ]), [
+    { value: "", label: "明示的に選択してください" },
+    { value: "child-a", label: "Child A" },
+    { value: "child-c", label: "Child C" },
+  ]);
+});
+
 test("migration errors are converted to safe parent-facing messages", () => {
   assert.match(ui.safeError(new Error("backup missing")), /バックアップ/);
   assert.match(ui.safeError(new Error("source state changed")), /元データ/);

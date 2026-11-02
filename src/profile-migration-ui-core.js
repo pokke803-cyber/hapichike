@@ -43,6 +43,31 @@
       && input.completed !== true;
   }
 
+  function householdSelection(households = [], currentHouseholdId = null) {
+    const householdId = households.some(household => household.id === currentHouseholdId)
+      ? currentHouseholdId
+      : households[0]?.id ?? null;
+    return {
+      householdId,
+      showSelect: households.length >= 2,
+      options: households.map(household => ({ value: household.id, label: household.name })),
+    };
+  }
+
+  function childSelectOptions(children = []) {
+    return [
+      { value: "", label: "明示的に選択してください" },
+      ...children.map(child => ({
+        value: child.id,
+        label: child.nickname ? `${child.name}（${child.nickname}）` : child.name,
+      })),
+    ];
+  }
+
+  function loadChildrenForHousehold(loader, householdId) {
+    return loader(householdId);
+  }
+
   function safeError(error) {
     const message = String(error?.message || "").toLowerCase();
     if (/backup missing|backup.*required/.test(message)) return "最新バックアップがありません。データ管理からバックアップを書き出してください。";
@@ -59,5 +84,15 @@
     return "子どもデータの移行に失敗しました。旧データは保持されています。";
   }
 
-  return Object.freeze({ BALANCE_FIELDS, backupBalances, compareBalances, approvalsComplete, canApply, safeError });
+  return Object.freeze({
+    BALANCE_FIELDS,
+    backupBalances,
+    compareBalances,
+    approvalsComplete,
+    canApply,
+    householdSelection,
+    childSelectOptions,
+    loadChildrenForHousehold,
+    safeError,
+  });
 });

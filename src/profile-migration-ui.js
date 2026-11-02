@@ -158,24 +158,23 @@ function renderComparison() {
 }
 
 function renderHouseholds() {
-  view.household.replaceChildren(...state.households.map(household => {
+  const householdUi = uiCore.householdSelection(state.households, state.householdId);
+  state.householdId = householdUi.householdId;
+  view.household.replaceChildren(...householdUi.options.map(item => {
     const option = document.createElement("option");
-    option.value = household.id;
-    option.textContent = household.name;
+    option.value = item.value;
+    option.textContent = item.label;
     return option;
   }));
   view.household.value = state.householdId || "";
-  view.householdRow.classList.toggle("hidden", state.households.length < 2);
+  view.householdRow.classList.toggle("hidden", !householdUi.showSelect);
 }
 
 function renderChildren() {
-  const placeholder = document.createElement("option");
-  placeholder.value = "";
-  placeholder.textContent = "明示的に選択してください";
-  view.child.replaceChildren(placeholder, ...state.children.map(child => {
+  view.child.replaceChildren(...uiCore.childSelectOptions(state.children).map(item => {
     const option = document.createElement("option");
-    option.value = child.id;
-    option.textContent = child.nickname ? `${child.name}（${child.nickname}）` : child.name;
+    option.value = item.value;
+    option.textContent = item.label;
     return option;
   }));
   view.child.value = "";
@@ -183,7 +182,7 @@ function renderChildren() {
 }
 
 async function loadChildren() {
-  state.children = await getChildrenByHousehold(state.householdId);
+  state.children = await uiCore.loadChildrenForHousehold(getChildrenByHousehold, state.householdId);
   renderChildren();
   if (!state.children.length) setStatus("このHouseholdに選択できるCloud Childがありません。");
 }
@@ -280,7 +279,6 @@ async function openPanel() {
       updateApplyState();
       return;
     }
-    state.householdId = state.households[0].id;
     renderHouseholds();
     await loadChildren();
     if (state.children.length) setStatus("移行対象データがあります。所有者のChildを明示的に選択してください。", true);
