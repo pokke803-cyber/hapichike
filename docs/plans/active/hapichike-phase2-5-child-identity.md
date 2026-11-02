@@ -743,7 +743,7 @@ apply直前に `kidsVegasCasino.identityMigrationSafety.v1` を作る。envelope
 
 # Source hash
 
-v1をdangerous key・plain JSON・finite number検査後、object keyを辞書順にしたcanonical JSONへ変換し、SHA-256 hexを計算する。property順や空白だけの差は同じhashになる。preview tokenはmigration version、source hash、target display name、legacy field scopesから生成する。apply時に再読込・再計算し、preview後にsourceまたは選択条件が変化していれば書込み前に拒否する。
+v1をdangerous key・plain JSON・finite number検査し、secret fieldを除外した後、object keyを辞書順にしたcanonical JSONへ変換してSHA-256 hexを計算する。property順や空白だけの差、および移行対象外の親パスワード値だけの差は同じ保存用hashになる。preview tokenには保存しないraw state hashも加える。apply時に再読込・再計算するため、親パスワードや空白を含めpreview後にv1 rawが変化した場合、または選択条件が変化した場合は書込み前に拒否する。
 
 # Apply flow
 
@@ -797,3 +797,42 @@ v2書込み前rawをmemoryに保持する。write/readback/schema/metadata/invar
 - 実データを複製した隔離環境でのfixture外受入試験
 - v2 backup/restoreと成功後rollback運用の実装・確認
 - Cloud mappingは引き続き自動継承せず、Phase 2.5D以降の別preview・親確認とする
+
+# Phase 2.5D migration UI
+
+親ロック内の「データ管理」付近に「子どもデータの移行」を追加した。パネルを開くまではmigration coreを呼ばず、開いた時も `inspectLegacyMigration()` とCloud SELECTだけを使う。Child選択後の `previewLegacyMigration()` を含め、applyボタンが押されるまでlocalStorage writeは0件である。通常アプリのsource of truthは引き続きv1であり、v2 activation、Phase 3、reward操作は接続しない。
+
+# Parent confirmation
+
+Cloud Childは未選択から始まり、legacyの `childName` 一致では選ばない。親が「この端末に保存されている現在のデータは誰のものですか？」へ回答する。選択したSupabase child IDは所有者確認にだけ使い、localChildKeyには転用しない。apply coreがWeb Crypto UUID v4を新規発行する。
+
+# Local/Cloud comparison
+
+選択Childについて `children` と `child_balances` をSELECTし、6残高をLocal legacy / Cloud currentで並べる。不一致時は警告するが、Cloud→Local補正、Local→Cloud送信、RPC、mapping保存を行わない。Cloud取得失敗時は未取得として示し、自動一致扱いにしない。
+
+# Apply guard
+
+Phase 0 backup metadataが現在のlegacy 6残高と一致すること、previewがconflict/duplicate/UNDECIDEDなしであること、選択Childが現在のHouseholdに存在すること、次の4確認をすべて必須とする。
+
+- 選択Childのデータであること
+- バックアップ作成済み
+- preview確認済み
+- Cloud残高を変更しないことの確認
+
+実行中flagとdisabledボタンで二重実行を防ぐ。apply直前にsession、Household、Child、source preview token、backup currentを再検証し、`applyLegacyMigration()` は1回だけ呼ぶ。
+
+# Error states
+
+backup missing、invalid legacy source、source changed、conflict、duplicate migration、selected Child invalid、safety backup failure、write failure、readback failureを親向け文言へ変換し、stack traceや秘密情報を表示しない。coreの失敗時rollbackを利用し、v1、mapping、以前のv2 active keyを維持する。
+
+# Staging acceptance
+
+stagingではUI表示、Child明示選択、preview、Cloud read-only比較、不一致警告、backup/approval gateまで確認できる。実データapplyはCodex判断では実行せず、Parent A / Household AでChild AまたはChild Cをユーザーが選択し、別途手動承認した場合だけ受入試験する。
+
+# Phase 2.5E prerequisites
+
+- migration成功済みv2 profileとSupabase child IDの明示mapping設計
+- v2 profile単位のbackup/restoreと手動rollback運用
+- v2を通常アプリのsource of truthへ切り替える明示的なactivation計画
+- Local/Cloud不一致を解決するreconciliation方針と親承認UI
+- Phase 3再開前のCloud write境界、idempotency、監査ログ再確認

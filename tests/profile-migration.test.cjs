@@ -154,6 +154,19 @@ test("safety copyとmetadataを作り、v1とcloudMapping v1はbyte-equivalent",
 test("source hashはcanonicalでproperty順に依存せずSHA-256", () => {
   assert.equal(migration.sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
   assert.equal(migration.canonicalize({ b: 2, a: 1 }), migration.canonicalize({ a: 1, b: 2 }));
+  const first = migration.previewLegacyMigration(setup(legacy({ parentPassword: "first-secret" })).storage, options());
+  const second = migration.previewLegacyMigration(setup(legacy({ parentPassword: "second-secret" })).storage, options());
+  assert.equal(first.sourceHash, second.sourceHash);
+  assert.notEqual(first.previewToken, second.previewToken);
+});
+
+test("migration metadataはhash・UUID参照・重複をschema validationする", () => {
+  const { storage } = setup();
+  previewAndApply(storage);
+  const root = JSON.parse(storage.getItem(migration.V2_KEY));
+  assert.throws(() => identity.validateStore({ ...root, identityMigrations: [{ ...root.identityMigrations[0], sourceHash: "bad" }] }), /SHA-256/);
+  assert.throws(() => identity.validateStore({ ...root, identityMigrations: [{ ...root.identityMigrations[0], targetLocalChildKey: UUID_C }] }), /existing profile/);
+  assert.throws(() => identity.validateStore({ ...root, identityMigrations: [root.identityMigrations[0], root.identityMigrations[0]] }), /duplicate sourceHash/);
 });
 
 test("同じsourceの二重migrationは別profileへコピーせず拒否", () => {

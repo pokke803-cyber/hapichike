@@ -122,6 +122,19 @@
     [...source.tasks, ...source.todayTasks, ...source.history].forEach((item, index) => {
       if (!core.isPlainObject(item)) throw new Error(`migration array item ${index} must be an object`);
     });
+    ["payLogs", "transferHistory", "ticketGiftLogs", "taskHistory"].forEach(key => {
+      (source[key] || []).forEach((item, index) => {
+        if (!core.isPlainObject(item)) throw new Error(`${key}[${index}] must be an object`);
+      });
+    });
+    ["starGiftHistory", "badges"].forEach(key => {
+      (source[key] || []).forEach((item, index) => {
+        if (typeof item !== "string") throw new Error(`${key}[${index}] must be a string`);
+      });
+    });
+    if (own(source, "lastDailyResetKey") && typeof source.lastDailyResetKey !== "string") {
+      throw new Error("lastDailyResetKey must be a string");
+    }
     return source;
   }
 
@@ -150,9 +163,12 @@
   }
 
   function taskMasterFrom(source) {
+    const ids = new Set();
     return source.tasks.map((task, index) => {
       if (!core.isPlainObject(task)) throw new Error(`tasks[${index}] must be an object`);
       if (typeof task.id !== "string" || !task.id) throw new Error(`tasks[${index}].id must be a string`);
+      if (ids.has(task.id)) throw new Error(`tasks contains duplicate id: ${task.id}`);
+      ids.add(task.id);
       const result = {};
       TASK_MASTER_FIELDS.forEach(key => { if (own(task, key)) result[key] = core.clone(task[key]); });
       return result;
@@ -177,9 +193,17 @@
 
   function mergeTaskMaster(existing, incoming, conflicts) {
     const result = core.clone(existing);
-    const byId = new Map(result.map((task, index) => [task.id, { task, index }]));
+    const byId = new Map();
+    result.forEach((task, index) => {
+      if (typeof task.id !== "string" || !task.id || byId.has(task.id)) conflicts.push("householdShared.taskMaster has invalid or duplicate ids");
+      else byId.set(task.id, { task, index });
+    });
     incoming.forEach(task => {
-      if (!byId.has(task.id)) result.push(core.clone(task));
+      if (!byId.has(task.id)) {
+        const clone = core.clone(task);
+        byId.set(task.id, { task: clone, index: result.length });
+        result.push(clone);
+      }
       else if (!deepEqual(byId.get(task.id).task, task)) conflicts.push(`householdShared.taskMaster[id=${task.id}]`);
     });
     return result;
@@ -212,13 +236,14 @@
     const targetDisplayName = requireTargetDisplayName(options.targetDisplayName);
     const sourceRaw = storage.getItem(V1_KEY);
     const source = parseSource(sourceRaw);
-    const sourceHash = sha256(canonicalize(source));
+    const sourceHash = sha256(canonicalize(backup.stripSecrets(source)));
+    const sourceStateHash = sha256(sourceRaw);
     const now = options.now || (() => new Date());
     const store = readExistingStore(storage, now().toISOString());
     const duplicate = existingMigrationByHash(store, sourceHash);
     const classified = classifyUnknown(source, options.legacyFieldScopes || {});
     const merge = buildHouseholdMerge(store, source, classified);
-    const previewToken = sha256(canonicalize({ migrationVersion: MIGRATION_VERSION, sourceHash, targetDisplayName, legacyFieldScopes: options.legacyFieldScopes || {} }));
+    const previewToken = sha256(canonicalize({ migrationVersion: MIGRATION_VERSION, sourceHash, sourceStateHash, targetDisplayName, legacyFieldScopes: options.legacyFieldScopes || {} }));
     const completed = source.todayTasks.filter(task => task.status === "done" || task.status === "completed" || task.status === "finished").length;
     const excludedSecretFields = own(source, "parentPassword") ? ["parentPassword"] : [];
     const preview = {
@@ -250,6 +275,28 @@
 
   function previewLegacyMigration(storage, options = {}) {
     return core.clone(prepare(storage, options).preview);
+  }
+
+  function inspectLegacyMigration(storage) {
+    if (!storage || typeof storage.getItem !== "function") throw new Error("a localStorage-compatible storage is required");
+    const sourceRaw = storage.getItem(V1_KEY);
+    const source = parseSource(sourceRaw);
+    const sourceHash = sha256(canonicalize(backup.stripSecrets(source)));
+    const store = readExistingStore(storage, new Date(0).toISOString());
+    const duplicate = existingMigrationByHash(store, sourceHash);
+    const completed = source.todayTasks.filter(task => task.status === "done" || task.status === "completed" || task.status === "finished").length;
+    return core.clone({
+      sourceHash,
+      sourceChildName: source.childName,
+      balances: Object.fromEntries(Object.entries(domain.BALANCE_MAPPING).map(([name, mapping]) => {
+        const parts = mapping.v1.split(".");
+        return [name, parts.reduce((value, part) => value[part], source)];
+      })),
+      todayTasks: { count: source.todayTasks.length, completed, pending: source.todayTasks.length - completed },
+      historyCount: source.history.length + OPTIONAL_ARRAY_FIELDS.filter(key => key !== "badges").reduce((sum, key) => sum + (source[key]?.length || 0), 0),
+      migrated: Boolean(duplicate),
+      duplicateMigration: duplicate ? { targetLocalChildKey: duplicate.targetLocalChildKey, migratedAt: duplicate.migratedAt } : null,
+    });
   }
 
   function buildProfile(source, localChildKey, targetDisplayName, classified, now, cryptoApi) {
@@ -290,8 +337,25 @@
     if (prepared.merge.conflicts.length) throw new Error(`householdShared conflicts require parent resolution: ${prepared.merge.conflicts.join(", ")}`);
 
     const now = options.now || (() => new Date());
-    const cryptoApi = options.cryptoApi || globalThis.crypto;
     const migratedAt = now().toISOString();
+    const safety = {
+      format: "hapichike-identity-migration-safety",
+      migrationVersion: MIGRATION_VERSION,
+      createdAt: migratedAt,
+      sourceKey: V1_KEY,
+      sourceHash: prepared.sourceHash,
+      source: backup.stripSecrets(prepared.source),
+      excludedSecretFields: prepared.preview.excludedSecretFields,
+    };
+    core.assertSafeValue(safety, "migration safety");
+    const safetyRaw = JSON.stringify(safety);
+    const previousV2Raw = storage.getItem(V2_KEY);
+    const originalV1Raw = prepared.sourceRaw;
+    const originalMappingRaw = storage.getItem(CLOUD_MAPPING_V1_KEY);
+    storage.setItem(SAFETY_KEY, safetyRaw);
+    if (storage.getItem(SAFETY_KEY) !== safetyRaw) throw new Error("migration safety copy readback failed");
+
+    const cryptoApi = options.cryptoApi || globalThis.crypto;
     const localChildKey = core.generateLocalChildKey(cryptoApi);
     if (own(prepared.store.profiles, localChildKey)) throw new Error("generated localChildKey already exists");
     const profile = buildProfile(prepared.source, localChildKey, prepared.targetDisplayName, prepared.classified, now, cryptoApi);
@@ -310,23 +374,6 @@
     candidate.updatedAt = migratedAt;
     core.validateStore(candidate);
     const candidateRaw = JSON.stringify(candidate);
-    const safety = {
-      format: "hapichike-identity-migration-safety",
-      migrationVersion: MIGRATION_VERSION,
-      createdAt: migratedAt,
-      sourceKey: V1_KEY,
-      sourceHash: prepared.sourceHash,
-      source: backup.stripSecrets(prepared.source),
-      excludedSecretFields: prepared.preview.excludedSecretFields,
-    };
-    core.assertSafeValue(safety, "migration safety");
-    const safetyRaw = JSON.stringify(safety);
-    const previousV2Raw = storage.getItem(V2_KEY);
-    const originalV1Raw = prepared.sourceRaw;
-    const originalMappingRaw = storage.getItem(CLOUD_MAPPING_V1_KEY);
-
-    storage.setItem(SAFETY_KEY, safetyRaw);
-    if (storage.getItem(SAFETY_KEY) !== safetyRaw) throw new Error("migration safety copy readback failed");
     try {
       storage.setItem(V2_KEY, candidateRaw);
       const readbackRaw = storage.getItem(V2_KEY);
@@ -345,6 +392,6 @@
 
   return Object.freeze({
     V1_KEY, V2_KEY, CLOUD_MAPPING_V1_KEY, SAFETY_KEY, MIGRATION_VERSION, SOURCE_NAME,
-    canonicalize, sha256, previewLegacyMigration, applyLegacyMigration,
+    canonicalize, sha256, inspectLegacyMigration, previewLegacyMigration, applyLegacyMigration,
   });
 });
