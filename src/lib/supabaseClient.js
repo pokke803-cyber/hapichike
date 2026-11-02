@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim();
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey);
+const STAGING_PROJECT_REF = "dhmkpqrfaukfbuoaenhk";
 
 if (!hasSupabaseConfig) {
   console.warn("[HAPICHIKE] Supabase is not configured; continuing in localStorage-only mode.");
@@ -14,4 +15,19 @@ export const supabase = hasSupabaseConfig
 
 export function isSupabaseConfigured() {
   return hasSupabaseConfig;
+}
+
+export function getSupabaseRuntimeDiagnostics() {
+  let stagingProject = false;
+  try {
+    stagingProject = new URL(supabaseUrl).hostname === `${STAGING_PROJECT_REF}.supabase.co`;
+  } catch {
+    stagingProject = false;
+  }
+  return Object.freeze({
+    clientInitialized: Boolean(supabase),
+    urlConfigured: Boolean(supabaseUrl),
+    anonKeyConfigured: Boolean(supabaseAnonKey),
+    stagingProject,
+  });
 }

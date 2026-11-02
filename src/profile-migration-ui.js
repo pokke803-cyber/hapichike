@@ -1,5 +1,6 @@
-import { isSupabaseConfigured } from "./lib/supabaseClient.js";
-import { getParentSession } from "./services/api/authApi.js";
+import { getSupabaseRuntimeDiagnostics, isSupabaseConfigured } from "./lib/supabaseClient.js";
+import { getParentSession, getParentUser } from "./services/api/authApi.js";
+import { requireSupabase } from "./services/api/apiClient.js";
 import { getCurrentHouseholds } from "./services/api/householdsApi.js";
 import { getChildrenByHousehold } from "./services/api/childrenApi.js";
 import { getChildBalances } from "./services/api/rewardsApi.js";
@@ -27,7 +28,10 @@ const view = {
   apply: byId("executeProfileMigrationBtn"),
   message: byId("migrationApplyMessage"),
   legacyNotice: byId("migrationLegacyNotice"),
+  diagnostics: Object.fromEntries([...document.querySelectorAll("[data-diagnostic]")].map(element => [element.dataset.diagnostic, element])),
 };
+
+const DIAGNOSTIC_KEYS = ["client", "session", "user", "userId", "memberships", "households", "children", "legacy", "backup", "preview"];
 
 const state = {
   source: null,
@@ -59,6 +63,117 @@ function setMessage(message, success = false) {
   view.message.className = `edit-error${success ? " pay-message success" : ""}`;
 }
 
+function setDiagnostic(key, phase, detail = "") {
+  const row = view.diagnostics[key];
+  if (!row) return;
+  row.dataset.state = phase;
+  row.lastElementChild.textContent = `${phase}${detail ? ` ・ ${detail}` : ""}`;
+}
+
+function resetDiagnostics() {
+  DIAGNOSTIC_KEYS.forEach(key => setDiagnostic(key, "loading"));
+  setDiagnostic("preview", "empty", "Child未選択");
+}
+
+async function runDiagnosticStep(key, operation) {
+  setDiagnostic(key, "loading");
+  let finished = false;
+  try {
+    const result = await operation();
+    setDiagnostic(key, result.phase, result.detail);
+    finished = true;
+    return { ok: result.phase !== "error", value: result.value };
+  } catch {
+    setDiagnostic(key, "error");
+    finished = true;
+    return { ok: false, value: null };
+  } finally {
+    if (!finished) setDiagnostic(key, "error");
+  }
+}
+
+function rowResult(rows) {
+  if (!Array.isArray(rows)) return { phase: "error", detail: "row形式不正", value: null };
+  return { phase: rows.length ? "success" : "empty", detail: `row count ${rows.length}`, value: rows };
+}
+
+async function loadCloudDiagnostics() {
+  const runtime = getSupabaseRuntimeDiagnostics();
+  const originKind = location.hostname.includes("vercel.app") && location.hostname !== "hapichike-staging.vercel.app"
+    ? "Preview origin"
+    : location.hostname === "hapichike-staging.vercel.app" ? "canonical staging origin" : "other origin";
+  const configDetail = `URL env ${runtime.urlConfigured ? "present" : "absent"} / anon env ${runtime.anonKeyConfigured ? "present" : "absent"} / ${runtime.stagingProject ? "staging ref一致" : "staging ref不一致"} / ${originKind}`;
+  setDiagnostic("client", runtime.clientInitialized ? "success" : "error", configDetail);
+  if (!runtime.clientInitialized || !runtime.stagingProject) {
+    const reason = runtime.clientInitialized ? "staging ref不一致のため未実行" : "client未初期化";
+    ["session", "user", "userId", "memberships", "households", "children"].forEach(key => setDiagnostic(key, "error", reason));
+    return { session: null, safeProject: false };
+  }
+
+  const sessionResult = await runDiagnosticStep("session", async () => {
+    const { session } = await getParentSession();
+    return { phase: session ? "success" : "empty", detail: session ? "present" : "absent", value: session };
+  });
+  const session = sessionResult.value;
+  if (!session) {
+    setDiagnostic("user", "empty", "absent");
+    setDiagnostic("userId", "empty", "取得不可");
+    ["memberships", "households", "children"].forEach(key => setDiagnostic(key, "empty", "sessionなしのため未実行"));
+    return { session: null, safeProject: true };
+  }
+
+  const userResult = await runDiagnosticStep("user", async () => {
+    const { user } = await getParentUser();
+    return { phase: user ? "success" : "empty", detail: user ? "present" : "absent", value: user };
+  });
+  const user = userResult.value;
+  setDiagnostic("userId", user?.id ? "success" : userResult.ok ? "empty" : "error", user?.id ? "取得可" : "取得不可");
+  if (!user?.id) {
+    ["memberships", "households", "children"].forEach(key => setDiagnostic(key, "empty", "user idなしのため未実行"));
+    return { session, safeProject: true };
+  }
+
+  const membershipsResult = await runDiagnosticStep("memberships", async () => {
+    const { data, error } = await requireSupabase().from("household_members").select("household_id").eq("user_id", user.id);
+    if (error) return { phase: "error", detail: "SELECT error", value: null };
+    return rowResult(data);
+  });
+  const memberships = membershipsResult.value;
+  if (!memberships) {
+    setDiagnostic("households", "empty", "membership SELECT失敗のため未実行");
+    setDiagnostic("children", "empty", "households未取得のため未実行");
+    return { session, safeProject: true };
+  }
+  if (!memberships.length) {
+    setDiagnostic("households", "empty", "row count 0");
+    setDiagnostic("children", "empty", "row count 0");
+    return { session, safeProject: true };
+  }
+
+  const householdIds = [...new Set(memberships.map(item => item.household_id).filter(Boolean))];
+  const householdsResult = await runDiagnosticStep("households", async () => {
+    const { data, error } = await requireSupabase().from("households").select("id").in("id", householdIds);
+    if (error) return { phase: "error", detail: "SELECT error", value: null };
+    return rowResult(data);
+  });
+  const households = householdsResult.value;
+  if (!households) {
+    setDiagnostic("children", "empty", "households SELECT失敗のため未実行");
+    return { session, safeProject: true };
+  }
+  if (!households.length) {
+    setDiagnostic("children", "empty", "row count 0");
+    return { session, safeProject: true };
+  }
+  await runDiagnosticStep("children", async () => {
+    const ids = households.map(item => item.id).filter(Boolean);
+    const { data, error } = await requireSupabase().from("children").select("id").in("household_id", ids);
+    if (error) return { phase: "error", detail: "SELECT error", value: null };
+    return rowResult(data);
+  });
+  return { session, safeProject: true };
+}
+
 function selectedChild() {
   return state.children.find(child => child.id === view.child.value) || null;
 }
@@ -77,8 +192,16 @@ function approvalState() {
 }
 
 function updateBackupGate() {
-  let metadata = null;
-  try { metadata = importCore.readBackupMetadata(localStorage); } catch { metadata = null; }
+  let metadata;
+  try {
+    metadata = importCore.readBackupMetadata(localStorage);
+    setDiagnostic("backup", metadata ? "success" : "empty", metadata ? "present" : "absent");
+  } catch {
+    state.backupCurrent = false;
+    view.backup.textContent = "バックアップmetadata取得エラー。";
+    setDiagnostic("backup", "error");
+    return;
+  }
   state.backupCurrent = Boolean(metadata && state.source && importCore.isBackupCurrent(metadata, uiCore.backupBalances(state.source.balances)));
   view.backup.textContent = state.backupCurrent
     ? `最新バックアップを確認済み（${new Date(metadata.backup_created_at).toLocaleString("ja-JP")}）`
@@ -182,9 +305,17 @@ function renderChildren() {
 }
 
 async function loadChildren() {
-  state.children = await uiCore.loadChildrenForHousehold(getChildrenByHousehold, state.householdId);
-  renderChildren();
-  if (!state.children.length) setStatus("このHouseholdに選択できるCloud Childがありません。");
+  setStatus("Child候補を取得中です。");
+  try {
+    state.children = await uiCore.loadChildrenForHousehold(getChildrenByHousehold, state.householdId);
+    renderChildren();
+    if (!state.children.length) setStatus("このHouseholdに選択できるCloud Childがありません。");
+  } catch (error) {
+    state.children = [];
+    renderChildren();
+    setStatus("Child取得エラー。Cloud Child候補は取得できませんでした。");
+    throw error;
+  }
 }
 
 async function selectChild() {
@@ -195,14 +326,17 @@ async function selectChild() {
   setMessage("");
   const child = selectedChild();
   if (!child) {
+    setDiagnostic("preview", "empty", "Child未選択");
     renderPreview();
     renderComparison();
     updateApplyState();
     return;
   }
   const targetDisplayName = String(child.name || "").trim();
+  setDiagnostic("preview", "loading");
   try {
     state.preview = migration.previewLegacyMigration(localStorage, { targetDisplayName });
+    setDiagnostic("preview", "success");
     state.selectedChildValid = true;
     renderPreview();
     updateBackupGate();
@@ -216,6 +350,7 @@ async function selectChild() {
     }
     renderComparison();
   } catch (error) {
+    setDiagnostic("preview", "error");
     state.preview = null;
     state.selectedChildValid = false;
     renderPreview();
@@ -231,6 +366,7 @@ async function openPanel() {
     sourceValid: false, selectedChildValid: false, backupCurrent: false, applying: false, completed: false,
   });
   resetApprovals();
+  resetDiagnostics();
   view.source.innerHTML = '<p class="parent-note">確認中です。</p>';
   view.child.innerHTML = '<option value="">明示的に選択してください</option>';
   view.child.disabled = true;
@@ -241,23 +377,33 @@ async function openPanel() {
   view.legacyNotice.classList.add("hidden");
   setMessage("");
   setStatus("移行対象を確認しています。");
+  setDiagnostic("legacy", "loading");
   try {
     state.source = migration.inspectLegacyMigration(localStorage);
     state.sourceValid = true;
+    setDiagnostic("legacy", "success", "present");
     renderSource();
-    updateBackupGate();
     if (state.source.migrated) {
       state.completed = true;
-      setStatus("移行済みです。", true);
       view.legacyNotice.classList.remove("hidden");
-      updateApplyState();
-      return;
     }
   } catch (error) {
     state.sourceValid = false;
     const noSource = localStorage.getItem(migration.V1_KEY) === null;
+    setDiagnostic("legacy", noSource ? "empty" : "error", noSource ? "absent" : "read error");
+    view.source.innerHTML = `<p class="parent-note">${noSource ? "このoriginに端末データはありません。" : "端末データ取得エラー。"}</p>`;
     setStatus(noSource ? "移行対象データはありません。" : uiCore.safeError(error));
+  } finally {
     updateBackupGate();
+  }
+
+  const diagnosticCloud = await loadCloudDiagnostics();
+  if (!state.sourceValid) {
+    updateApplyState();
+    return;
+  }
+  if (state.completed) {
+    setStatus("移行済みです。", true);
     updateApplyState();
     return;
   }
@@ -266,8 +412,14 @@ async function openPanel() {
     updateApplyState();
     return;
   }
+  if (!diagnosticCloud.safeProject) {
+    setStatus("staging Supabase refを確認できないため、Cloud読取を実行しません。");
+    updateApplyState();
+    return;
+  }
+  let cloudStage = "households";
   try {
-    const { session } = await getParentSession();
+    const session = diagnosticCloud.session;
     if (!session?.user) {
       setStatus("移行対象データはあります。親ダッシュボードでログインするとChildを選択できます。");
       updateApplyState();
@@ -280,12 +432,16 @@ async function openPanel() {
       return;
     }
     renderHouseholds();
+    cloudStage = "children";
     await loadChildren();
     if (state.children.length) setStatus("移行対象データがあります。所有者のChildを明示的に選択してください。", true);
   } catch {
-    setStatus("Cloud Child一覧を取得できませんでした。ローカルデータは変更していません。");
+    if (cloudStage === "households") {
+      setStatus("Household取得エラー。Cloud Child候補は取得できませんでした。ローカルデータは変更していません。");
+    }
+  } finally {
+    updateApplyState();
   }
-  updateApplyState();
 }
 
 function verifySuccess(result, before) {

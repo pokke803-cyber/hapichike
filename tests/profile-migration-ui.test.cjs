@@ -141,3 +141,13 @@ test("page load only registers migration UI and does not open or apply it", () =
   assert.doesNotMatch(source, /DOMContentLoaded[^\n]*openPanel/);
   assert.equal((source.match(/migration\.applyLegacyMigration\(/g) || []).length, 1);
 });
+
+test("temporary diagnostics distinguish empty rows from SELECT errors without exposing secrets", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../src/profile-migration-ui.js"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
+  assert.match(html, /read-only diagnostic/i);
+  assert.match(source, /SELECT error/);
+  assert.match(source, /row count \$\{rows\.length\}/);
+  assert.match(source, /finally/);
+  assert.doesNotMatch(source, /access[_ ]token|refresh[_ ]token|authorization header|service[_ ]role/i);
+});
