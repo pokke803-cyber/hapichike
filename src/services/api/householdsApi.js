@@ -7,21 +7,40 @@ export const getHouseholds = () => unwrap(
     .order("created_at"),
 );
 
-// Start from the authenticated parent's membership rows. RLS remains the
-// authorization boundary and limits both the memberships and joined households.
-export const getCurrentHouseholds = async (userId) => {
-  const memberships = await unwrap(
+export const getHouseholdMembershipsForUser = (userId) => unwrap(
+  requireSupabase()
+    .from("household_members")
+    .select("household_id, role, created_at")
+    .eq("user_id", userId)
+    .order("created_at"),
+);
+
+export const getHouseholdsByIds = (householdIds) => {
+  const ids = [...new Set((householdIds ?? []).filter(Boolean))];
+  if (!ids.length) return Promise.resolve([]);
+  return unwrap(
     requireSupabase()
-      .from("household_members")
-      .select("role, created_at, households!inner(*)")
-      .eq("user_id", userId)
+      .from("households")
+      .select("id, name, created_at")
+      .in("id", ids)
       .order("created_at"),
   );
-  return memberships.map(({ households, role, created_at: membershipCreatedAt }) => ({
-    ...households,
-    membership_role: role,
-    membership_created_at: membershipCreatedAt,
-  }));
+};
+
+// Start from the authenticated parent's membership rows. Keep membership and
+// household SELECT failures distinct; RLS remains the authorization boundary.
+export const getCurrentHouseholds = async (userId) => {
+  const memberships = await getHouseholdMembershipsForUser(userId);
+  const households = await getHouseholdsByIds(memberships.map(item => item.household_id));
+  const membershipByHousehold = new Map(memberships.map(item => [item.household_id, item]));
+  return households.map((household) => {
+    const membership = membershipByHousehold.get(household.id);
+    return {
+      ...household,
+      membership_role: membership?.role,
+      membership_created_at: membership?.created_at,
+    };
+  });
 };
 
 export const createHousehold = (name) => unwrap(

@@ -4,6 +4,7 @@ import { requireSupabase } from "./services/api/apiClient.js";
 import { getCurrentHouseholds } from "./services/api/householdsApi.js";
 import { getChildrenByHousehold } from "./services/api/childrenApi.js";
 import { getChildBalances } from "./services/api/rewardsApi.js";
+import { loadCloudChildCandidates } from "./services/cloud-child-candidates.js";
 
 const migration = window.HapichikeProfileMigration;
 const uiCore = window.HapichikeProfileMigrationUi;
@@ -45,6 +46,9 @@ const state = {
   backupCurrent: false,
   applying: false,
   completed: false,
+  session: null,
+  localReadState: "checking",
+  cloudChildrenReadState: "not-run",
 };
 
 function escapeHtml(value) {
@@ -301,17 +305,23 @@ function renderChildren() {
     return option;
   }));
   view.child.value = "";
-  view.child.disabled = !state.children.length || !state.sourceValid || state.completed;
+  view.child.disabled = !state.children.length;
 }
 
 async function loadChildren() {
   setStatus("Child候補を取得中です。");
+  state.cloudChildrenReadState = "loading";
   try {
-    state.children = await uiCore.loadChildrenForHousehold(getChildrenByHousehold, state.householdId);
+    const result = await loadCloudChildCandidates({ session: state.session, householdId: state.householdId });
+    state.households = result.households;
+    state.householdId = result.householdId;
+    state.children = result.children;
+    state.cloudChildrenReadState = result.childrenState;
     renderChildren();
     if (!state.children.length) setStatus("このHouseholdに選択できるCloud Childがありません。");
   } catch (error) {
     state.children = [];
+    state.cloudChildrenReadState = "error";
     renderChildren();
     setStatus("Child取得エラー。Cloud Child候補は取得できませんでした。");
     throw error;
@@ -364,6 +374,7 @@ async function openPanel() {
   Object.assign(state, {
     source: null, preview: null, households: [], householdId: null, children: [], cloudBalance: null,
     sourceValid: false, selectedChildValid: false, backupCurrent: false, applying: false, completed: false,
+    session: null, localReadState: "checking", cloudChildrenReadState: "not-run",
   });
   resetApprovals();
   resetDiagnostics();
@@ -381,6 +392,7 @@ async function openPanel() {
   try {
     state.source = migration.inspectLegacyMigration(localStorage);
     state.sourceValid = true;
+    state.localReadState = "success";
     setDiagnostic("legacy", "success", "present");
     renderSource();
     if (state.source.migrated) {
@@ -390,6 +402,7 @@ async function openPanel() {
   } catch (error) {
     state.sourceValid = false;
     const noSource = localStorage.getItem(migration.V1_KEY) === null;
+    state.localReadState = noSource ? "missing" : "invalid";
     setDiagnostic("legacy", noSource ? "empty" : "error", noSource ? "absent" : "read error");
     view.source.innerHTML = `<p class="parent-note">${noSource ? "このoriginに端末データはありません。" : "端末データ取得エラー。"}</p>`;
     setStatus(noSource ? "移行対象データはありません。" : uiCore.safeError(error));
@@ -398,15 +411,6 @@ async function openPanel() {
   }
 
   const diagnosticCloud = await loadCloudDiagnostics();
-  if (!state.sourceValid) {
-    updateApplyState();
-    return;
-  }
-  if (state.completed) {
-    setStatus("移行済みです。", true);
-    updateApplyState();
-    return;
-  }
   if (!isSupabaseConfigured()) {
     setStatus("移行対象データはありますが、Cloud Child一覧を取得するためのSupabase設定がありません。");
     updateApplyState();
@@ -420,23 +424,37 @@ async function openPanel() {
   let cloudStage = "households";
   try {
     const session = diagnosticCloud.session;
+    state.session = session;
     if (!session?.user) {
       setStatus("移行対象データはあります。親ダッシュボードでログインするとChildを選択できます。");
       updateApplyState();
       return;
     }
-    state.households = await getCurrentHouseholds(session.user.id);
+    const result = await loadCloudChildCandidates({ session });
+    state.households = result.households;
     if (!state.households.length) {
       setStatus("ログイン中ですが、所属Householdがありません。");
       updateApplyState();
       return;
     }
+    state.householdId = result.householdId;
+    state.children = result.children;
+    state.cloudChildrenReadState = result.childrenState;
     renderHouseholds();
     cloudStage = "children";
-    await loadChildren();
-    if (state.children.length) setStatus("移行対象データがあります。所有者のChildを明示的に選択してください。", true);
-  } catch {
-    if (cloudStage === "households") {
+    renderChildren();
+    if (state.children.length) {
+      setStatus(state.sourceValid
+        ? state.completed ? "移行済みです。Cloud Child候補を確認できます。" : "移行対象データがあります。所有者のChildを明示的に選択してください。"
+        : `Cloud Child候補を取得しました。Local v1は${state.localReadState === "missing" ? "missing" : "invalid"}です。`, true);
+    } else {
+      setStatus("このHouseholdに選択できるCloud Childがありません。");
+    }
+  } catch (error) {
+    state.cloudChildrenReadState = "error";
+    if (error?.stage === "children" || cloudStage === "children") {
+      setStatus("Child取得エラー。Cloud Child候補は取得できませんでした。");
+    } else {
       setStatus("Household取得エラー。Cloud Child候補は取得できませんでした。ローカルデータは変更していません。");
     }
   } finally {

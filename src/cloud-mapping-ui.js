@@ -2,6 +2,7 @@ import { isSupabaseConfigured } from "./lib/supabaseClient.js";
 import { getParentSession } from "./services/api/authApi.js";
 import { getCurrentHouseholds } from "./services/api/householdsApi.js";
 import { getChildrenByHousehold } from "./services/api/childrenApi.js";
+import { loadCloudChildCandidates } from "./services/cloud-child-candidates.js";
 import { getChildBalances, getChildAppSyncState, importInitialHapichikeSnapshot } from "./services/api/rewardsApi.js";
 import { getRewardLogs } from "./services/api/historyApi.js";
 
@@ -46,6 +47,9 @@ const state = {
   importing: false,
   retryAvailable: false,
   rpcRejected: false,
+  session: null,
+  localReadState: "checking",
+  cloudChildrenReadState: "not-run",
 };
 
 const readinessLabels = {
@@ -121,9 +125,11 @@ function renderChildren() {
     option.textContent = child.nickname ? `${child.name}（${child.nickname}）` : child.name;
     return option;
   }));
-  const verified = mappingCore.findVerifiedMapping(state.mappingDocument, state.localChild.localChildKey, state.householdId, state.children);
+  const verified = state.localChild && state.mappingDocument
+    ? mappingCore.findVerifiedMapping(state.mappingDocument, state.localChild.localChildKey, state.householdId, state.children)
+    : null;
   view.child.value = verified?.supabaseChildId ?? "";
-  view.save.disabled = !state.children.length;
+  view.save.disabled = !state.children.length || !state.localChild;
 }
 
 function differenceLabel(row) {
@@ -264,8 +270,14 @@ async function renderComparison() {
 }
 
 async function loadChildren() {
-  state.children = await getChildrenByHousehold(state.householdId);
+  state.cloudChildrenReadState = "loading";
+  const result = await loadCloudChildCandidates({ session: state.session, householdId: state.householdId });
+  state.households = result.households;
+  state.householdId = result.householdId;
+  state.children = result.children;
+  state.cloudChildrenReadState = result.childrenState;
   renderChildren();
+  renderImportPanel();
   if (!state.children.length) {
     resetComparison("この家庭にクラウドChildがありません。");
     setStatus("接続済みですが、この家庭にchildrenがありません。");
@@ -279,6 +291,10 @@ async function openPanel() {
   state.householdId = null;
   state.children = [];
   state.loggedIn = false;
+  state.session = null;
+  state.localReadState = "checking";
+  state.cloudChildrenReadState = "not-run";
+  state.mappingDocument = mappingCore.parseMappingDocument(null);
   view.householdRow.classList.add("hidden");
   view.child.innerHTML = '<option value="">明示的に選択してください</option>';
   view.save.disabled = true;
@@ -286,40 +302,57 @@ async function openPanel() {
   resetComparison();
   try {
     state.localChild = mappingCore.readLocalChild(localStorage);
-    state.mappingDocument = mappingCore.readMapping(localStorage);
+    state.localReadState = "success";
     view.local.textContent = `${state.localChild.name}（単一ローカルプロフィール）`;
-    renderImportPanel();
   } catch (error) {
     state.localChild = null;
-    view.local.textContent = "読込不可";
-    setStatus(error.message);
-    view.save.disabled = true;
-    renderImportPanel();
-    return;
+    const missing = localStorage.getItem(mappingCore.MAIN_STORAGE_KEY) === null;
+    state.localReadState = missing ? "missing" : "invalid";
+    view.local.textContent = missing ? "未検出" : "読込エラー";
   }
+  try { state.mappingDocument = mappingCore.readMapping(localStorage); } catch { state.mappingDocument = mappingCore.parseMappingDocument(null); }
+  renderImportPanel();
   if (!isSupabaseConfigured()) {
     setStatus("Supabase未設定です。ローカルデータは変更していません。");
     return;
   }
   try {
-    const { session } = await getParentSession();
-    if (!session?.user) {
+    const result = await loadCloudChildCandidates();
+    state.session = result.session;
+    if (!result.session?.user) {
       setStatus("Parent未ログインです。親ダッシュボードでログインしてから戻ってください。");
       return;
     }
     state.loggedIn = true;
-    state.households = await getCurrentHouseholds(session.user.id);
+    state.households = result.households;
     if (!state.households.length) {
       setStatus("ログイン中ですが、所属householdがありません。");
       renderImportPanel();
       return;
     }
-    const savedHouseholdId = state.mappingDocument.mappings.find(item => item.localChildKey === state.localChild.localChildKey)?.householdId;
-    state.householdId = state.households.some(item => item.id === savedHouseholdId) ? savedHouseholdId : state.households[0].id;
+    const savedHouseholdId = state.localChild
+      ? state.mappingDocument.mappings.find(item => item.localChildKey === state.localChild.localChildKey)?.householdId
+      : null;
+    state.householdId = state.households.some(item => item.id === savedHouseholdId) ? savedHouseholdId : result.householdId;
+    state.children = state.householdId === result.householdId ? result.children : [];
+    state.cloudChildrenReadState = result.childrenState;
     renderHouseholds();
-    await loadChildren();
+    if (state.householdId !== result.householdId) await loadChildren();
+    else {
+      renderChildren();
+      renderImportPanel();
+      if (!state.children.length) resetComparison("この家庭にクラウドChildがありません。");
+      else await renderComparison();
+    }
+    setStatus(state.children.length
+      ? state.localReadState === "success"
+        ? `接続中 / Parent login済み / household: ${state.households.find(item => item.id === state.householdId)?.name ?? "確認済み"}`
+        : `Cloud Child候補を取得しました。Local childは${state.localReadState === "missing" ? "未検出" : "読込エラー"}です。`
+      : "接続済みですが、この家庭にchildrenがありません。",
+    state.children.length && state.localReadState === "success" ? "success" : "");
   } catch (error) {
-    setStatus(error?.message || "Supabaseへの接続に失敗しました。");
+    state.cloudChildrenReadState = "error";
+    setStatus(error?.stage === "children" ? "Cloud Child取得エラー。" : error?.message || "Supabaseへの接続に失敗しました。");
     renderImportPanel();
   }
 }
