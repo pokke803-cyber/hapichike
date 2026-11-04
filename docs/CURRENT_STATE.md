@@ -1,6 +1,6 @@
 # Current state
 
-調査基準: 2026-09-19。理想仕様ではなく、現行UIと追加済みSupabase基盤の状態を記録しています。
+調査基準: 2026-11-04。理想仕様ではなく、現行UIと追加済みSupabase基盤の状態を記録しています。
 
 ## 実装済み
 
@@ -22,6 +22,9 @@
 - レスポンシブ表示と `prefers-reduced-motion` 対応
 - `/parent` の親スマホ用 Supabase 閲覧専用ダッシュボード（Auth、家庭／子ども切替、残高、最近の履歴）
 - 親設定のクラウド連携に、backup・mapping・role・Cloud未初期化を確認する初回snapshot import UI（明示承認後の専用RPCのみ）
+- `kidsVegasCasino.v2` のUUIDローカルプロフィール、active Child切替、Child別残高・割当・履歴・進捗・reset分離
+- v2 activation後の共通Local State adapter（v1へのfallbackを行わないfail-closed方式）
+- legacy v1の所有者明示migration、v2 backup/restore preview、v2 Cloud mappingとreward child resolver
 
 ## 現在の画面構成とモード
 
@@ -29,7 +32,7 @@
 
 ## 保存方式
 
-子ども側の実データはブラウザの localStorage のみです。アプリ状態は `kidsVegasCasino.v1`、親メールは `kidsVegasCasino.parentEmail.v1` に保存します。親用 `/parent` は Supabase を閲覧し、同一originのLocal v1/v2、mapping、backup metadataをread-onlyで比較表示します。localStorage書込み、Cloud書込み、自動同期・移行は行いません。詳細は `STORAGE.md` と `SYNC_STRATEGY.md` を参照してください。
+子ども側の実データはブラウザの localStorage のみです。未移行時は `kidsVegasCasino.v1`、v2 activation後は `kidsVegasCasino.v2` のactive profileをSource of Truthにします。v1は削除・更新せず安全確認用に保持します。親メールは `kidsVegasCasino.parentEmail.v1` に保存します。親用 `/parent` は Supabase を閲覧し、同一originのLocal v1/v2、mapping、backup metadataを比較表示します。
 
 ## Supabase基盤（親閲覧画面のみ接続）
 
@@ -43,7 +46,7 @@
 
 ## 現在の制約・未完成機能
 
-- 子どもの名前は表示ラベルであり、子ども別のプロフィール／残高／履歴分離はありません。
+- 実legacy migration apply、実v2 mapping保存、実データでの最終activationは親の明示確認が必要です。
 - JSONバックアップ／復元と、明示承認による1回限りのSupabase initial importは実装済みです。通常のcloud syncは未実装です。
 - 外部MP3は全て未配置です。Web Audioフォールバックで操作は継続できます。
 - お手伝い状態に `inProgress` の互換処理はありますが、現行UIに開始操作はなく、追加後は直接完了します。

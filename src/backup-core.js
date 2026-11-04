@@ -183,12 +183,26 @@
     const current = isPlainObject(currentState) ? currentState : {};
     const countHistory = value => Array.isArray(value?.history) ? value.history.length : 0;
     const v2 = envelope.version === VERSION ? envelope.data[V2_STORAGE_KEY] : null;
+    const profileSummaries = v2 ? Object.values(v2.profiles).map(profile => ({
+      localChildKey: profile.localChildKey,
+      childName: profile.childName || "未設定",
+      active: profile.localChildKey === v2.activeLocalChildKey,
+      balances: {
+        tickets: profile.coins,
+        starCoins: profile.starCoins,
+        sweetsPay: profile.points?.snack,
+        toyPay: profile.points?.toy,
+        gamePay: profile.points?.game,
+        happyChanceCards: profile.happyChanceCards,
+      },
+    })) : [];
     return {
       createdAt: envelope.createdAt,
       version: envelope.version,
       childName: backup.childName || "未設定",
       profileCount: v2 ? Object.keys(v2.profiles).length : 0,
       activeLocalChildKey: v2?.activeLocalChildKey ?? null,
+      profiles: profileSummaries,
       householdShared: v2?.householdShared ?? null,
       rows: [
         ["tickets", current.coins, backup.coins],

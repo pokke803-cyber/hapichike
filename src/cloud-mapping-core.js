@@ -105,11 +105,18 @@
     if (!isPlainObject(document) || document.appId !== APP_ID || document.version !== 2 || !Array.isArray(document.mappings)) {
       throw new Error("保存済みのv2対応付け形式に対応していません。");
     }
+    const localKeys = new Set();
+    const cloudIds = new Set();
     const mappings = document.mappings.map(mapping => {
       if (!isPlainObject(mapping) || typeof mapping.localChildKey !== "string" || !mapping.localChildKey
         || typeof mapping.supabaseChildId !== "string" || !mapping.supabaseChildId
         || typeof mapping.householdId !== "string" || !mapping.householdId
         || typeof mapping.confirmedAt !== "string") throw new Error("保存済みのv2対応付け情報が不正です。");
+      if (localKeys.has(mapping.localChildKey) || cloudIds.has(mapping.supabaseChildId)) {
+        throw new Error("保存済みのv2対応付けに重複があります。");
+      }
+      localKeys.add(mapping.localChildKey);
+      cloudIds.add(mapping.supabaseChildId);
       return { ...mapping };
     });
     return { appId: APP_ID, version: 2, mappings };

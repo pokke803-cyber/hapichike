@@ -2,6 +2,25 @@
 
 ## 保存単位
 
+v2 activation後のrootは次の構造です。`profiles` はUUID v4の `localChildKey` をkeyとし、`activeLocalChildKey` が子ども側画面の操作対象です。
+
+```js
+{
+  version: 2,
+  appId: "hapichike",
+  activeLocalChildKey: string,
+  profiles: { [localChildKey]: Profile },
+  householdShared: { taskMaster, categoryMaster, rouletteSettings, parentSettings, dailyResetPolicy, legacyExtras },
+  identityMigrations: MigrationRecord[],
+  activation: { status: "active", activatedAt: string },
+  updatedAt: string
+}
+```
+
+各Profileは名前、6残高、todayTasks、各履歴、badges、lastDailyResetKeyを分離します。task masterは `householdShared.taskMaster` のみに保持し、profileの `tasks` は互換用の空配列です。open modal、tab、roulette animation、draft等は保存しません。
+
+未移行ユーザーでは、以下のv1構造を互換読込します。
+
 主状態は localStorage `kidsVegasCasino.v1` の1オブジェクトです。主キー相当は task系の `id` / `taskId` ですが、DB制約はありません。以下はコードから確認できる実質的な型です。
 
 Supabase側には家庭、member、children、子ども別残高、tasks/today tasks、掲示板、reward logs、parent settingsの正規化schemaを用意しています。ただし現行localStorageとの対応付け・変換・同期は未実装であり、下記local stateの構造は変更していません。

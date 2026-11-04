@@ -13,6 +13,10 @@ Supabase設定はVite環境変数 `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KE
 | `kidsVegasCasino.v1` | `state` 全体。名前、残高、タスク、履歴、親設定、音設定など | 保存がない／JSON不正／tasks不在なら初期状態 |
 | `kidsVegasCasino.parentEmail.v1` | 親メール文字列 | 空文字。主状態内の旧 `parentEmail` より優先 |
 | `kidsVegasCasino.restoreSafety.v1` | 復元直前のversion 1 backup envelope | 復元実行直前に上書き。秘密情報は除外 |
+| `kidsVegasCasino.v2` | 複数ローカルChild profile、activeLocalChildKey、householdShared、migration metadata | activation後の通常アプリSource of Truth |
+| `kidsVegasCasino.v2.activation` | v2が有効化済みであることを示すfail-closed marker | 値は `active`。v2不正時にv1へfallbackしないために使用 |
+| `kidsVegasCasino.deviceSettings.v1` | BGM/SFX等の端末設定 | Child profileへ混ぜない |
+| `kidsVegasCasino.cloudMapping.v2` | localChildKeyとSupabase child_idの親確認済み1対1mapping | backup/restore対象外 |
 
 主キーの詳細と保存フィールドは `DATA_STRUCTURE.md` を参照してください。
 
@@ -27,7 +31,7 @@ Supabase設定はVite環境変数 `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KE
 
 `normalizeState` は読込時に不足フィールドを初期化し、数値をNumber化し、負のスター／カードを0へ丸めます。タスク報酬は1〜5へ丸め、旧 `done`、`completed`、`finished`、`doing` などを現行statusへ変換します。旧カテゴリー `living` は `creature`、`other` / `study` / 不正値はタイトル・アイコンから推定します。旧タスク状態から `todayTasks` を生成する移行もあります。
 
-不足や移行を検出した場合は、アプリ起動直後に同じキーへ正規化済み状態を上書きします。スキーマversionフィールド、段階的migration番号、移行前バックアップはありません。
+v1利用中は従来互換です。v2 activation後の通常書込みはactive profileとhouseholdSharedへ分割し、v1へは書き込みません。active key/profile/schemaが不正なら操作を停止し、v1へfallbackしません。
 
 ## 履歴上限
 

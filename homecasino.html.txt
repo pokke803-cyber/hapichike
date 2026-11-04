@@ -309,6 +309,17 @@
       cursor: pointer;
     }
 
+    .local-child-select {
+      max-width: 180px;
+      border: 2px solid rgba(255,255,255,.8);
+      border-radius: 999px;
+      padding: 7px 30px 7px 12px;
+      background: rgba(255,255,255,.96);
+      color: #4b2e83;
+      font: inherit;
+      font-weight: 800;
+    }
+
     .login-screen {
       position: fixed;
       inset: 0;
@@ -2853,6 +2864,10 @@
         <p class="subtitle">お手伝いチケットをためて、ルーレットでごほうびポイントをためよう♪</p>
         <div class="account-chip" id="accountChip">
           <span id="childGreeting">こんにちは！</span>
+          <label class="hidden" id="localChildSelectorLabel">
+            <span class="sr-only">操作する子ども</span>
+            <select class="local-child-select" id="localChildSelector" aria-label="操作する子ども"></select>
+          </label>
           <button type="button" id="changeNameBtn">なまえを変える</button>
         </div>
         <svg class="mascot" viewBox="0 0 260 260" role="img" aria-label="スターコインをジャグリングするHAPICHIKEのマスコット">
@@ -3437,15 +3452,16 @@
 
   <script type="module" src="/src/child-identity-core.js"></script>
   <script type="module" src="/src/profile-domain.js"></script>
+  <script type="module" src="/src/cloud-mapping-core.js"></script>
+  <script type="module" src="/src/local-state-adapter.js"></script>
   <script type="module" src="/src/backup-core.js"></script>
   <script type="module" src="/src/profile-migration.js"></script>
   <script type="module" src="/src/profile-migration-ui-core.js"></script>
-  <script type="module" src="/src/cloud-mapping-core.js"></script>
   <script type="module" src="/src/initial-import-core.js"></script>
   <script type="module" src="/src/profile-migration-ui.js"></script>
   <script type="module" src="/src/cloud-mapping-ui.js"></script>
   <script type="module" src="/src/online-rewards.js"></script>
-  <script>
+  <script type="module">
     const storageKey = "kidsVegasCasino.v1";
     const parentEmailStorageKey = "kidsVegasCasino.parentEmail.v1";
     const dailyResetHour = 6;
@@ -3603,6 +3619,8 @@
       "🍽️", "🧽", "🥄", "🐟", "🧸", "🧹", "🧺", "🌱", "📚", "✏️", "🪥", "🚿", "🛏️", "🗑️", "🍳", "📝", "🎵"
     ])];
     let needsStateSave = false;
+    let localStateMode = "legacy";
+    let localStateBlockedError = null;
     let state = loadState();
     let activeCategory = "snack";
     let activeTaskCategory = "all";
@@ -3640,11 +3658,17 @@
     if (needsStateSave) saveState();
 
     function loadState() {
+      const fallback = () => normalizeState({ childName: "", coins: 0, tasks: defaultTasks, history: [], payLogs: [], taskHistory: [], parentPassword: "1234", badges: [] });
       try {
-        const saved = JSON.parse(localStorage.getItem(storageKey));
-        if (saved && Array.isArray(saved.tasks)) return normalizeState(saved);
-      } catch (error) {}
-      return normalizeState({ childName: "", coins: 0, tasks: defaultTasks, history: [], payLogs: [], taskHistory: [], parentPassword: "1234", badges: [] });
+        const loaded = window.HapichikeLocalState.load(localStorage, fallback);
+        localStateMode = loaded.mode;
+        localStateBlockedError = null;
+        return normalizeState(loaded.state || fallback());
+      } catch (error) {
+        localStateMode = "blocked";
+        localStateBlockedError = error;
+        return fallback();
+      }
     }
 
     function normalizeState(saved) {
@@ -3867,7 +3891,45 @@
     }
 
     function saveState() {
-      localStorage.setItem(storageKey, JSON.stringify(state));
+      if (localStateBlockedError) throw localStateBlockedError;
+      const saved = window.HapichikeLocalState.save(localStorage, state);
+      localStateMode = saved.mode;
+    }
+
+    function renderLocalChildSelector() {
+      const label = document.getElementById("localChildSelectorLabel");
+      const select = document.getElementById("localChildSelector");
+      if (!label || !select) return;
+      let profiles = [];
+      try { profiles = window.HapichikeLocalState.listProfiles(localStorage); } catch {}
+      label.classList.toggle("hidden", profiles.length < 2);
+      select.replaceChildren(...profiles.map(profile => {
+        const option = document.createElement("option");
+        option.value = profile.localChildKey;
+        option.textContent = profile.childName;
+        option.selected = profile.active;
+        return option;
+      }));
+    }
+
+    function switchLocalChild(event) {
+      if (localStateMode !== "v2" || spinning) return;
+      try {
+        saveState();
+        window.HapichikeLocalState.switchActive(localStorage, event.target.value);
+        state = loadState();
+        activeCategory = "snack";
+        activeStatusTab = "active";
+        latestRouletteResult = null;
+        happyChanceReserved = false;
+        applyAutomaticDailyReset();
+        render();
+        showToast(`${sanitizeName(state.childName) || "選んだ子"}に切り替えました。`);
+      } catch (error) {
+        localStateBlockedError = error;
+        render();
+        showToast("子どもを安全に切り替えられませんでした。");
+      }
     }
 
     async function commitReward(options, localMutation) {
@@ -4201,6 +4263,7 @@
 
     function render() {
       renderAccount();
+      renderLocalChildSelector();
       renderTaskStatusTabs();
       renderTaskFilters();
       renderTasks();
@@ -4381,7 +4444,13 @@
       const greeting = document.getElementById("childGreeting");
       const taskTitle = document.getElementById("taskSectionTitle");
 
-      if (name) {
+      if (localStateBlockedError) {
+        loginScreen.classList.remove("hidden");
+        greeting.textContent = "データ確認が必要です";
+        taskTitle.textContent = "安全のため操作を停止中";
+        document.getElementById("loginError").textContent = "有効化済みの子どもデータを確認できません。v1へは自動で戻りません。おうちの人に知らせてください。";
+        document.querySelector("#loginForm .login-submit").disabled = true;
+      } else if (name) {
         loginScreen.classList.add("hidden");
         greeting.textContent = `こんにちは、${name}！`;
         taskTitle.textContent = `${name}のお手伝い`;
@@ -5143,8 +5212,10 @@
         link.click();
         link.remove();
         URL.revokeObjectURL(url);
-        const localChild = window.HapichikeCloudMapping.readLocalChild(localStorage);
-        window.HapichikeInitialImport.recordBackupMetadata(localStorage, envelope.createdAt, localChild.balances);
+        if (localStateMode === "legacy") {
+          const localChild = window.HapichikeCloudMapping.readLocalChild(localStorage);
+          window.HapichikeInitialImport.recordBackupMetadata(localStorage, envelope.createdAt, localChild.balances);
+        }
         window.dispatchEvent(new CustomEvent("hapichike:backup-created"));
         message.textContent = "バックアップを書き出しました。安全な場所に保管してください。";
         message.className = "edit-error pay-message success";
@@ -5174,11 +5245,18 @@
           ${details.rows.map(([label, current, backup]) => `
             <div class="backup-compare-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(formatValue(current))} → ${escapeHtml(formatValue(backup))}</span></div>
           `).join("")}
+          ${details.profiles?.length ? `
+            <div class="backup-preview-summary"><strong>Local profiles：${details.profileCount}人</strong></div>
+            ${details.profiles.map(profile => `<div class="backup-compare-row"><span>${escapeHtml(profile.childName)}${profile.active ? "（active）" : ""}</span><span>🎟️${profile.balances.tickets} / ⭐${profile.balances.starCoins} / PAY ${profile.balances.sweetsPay}, ${profile.balances.toyPay}, ${profile.balances.gamePay} / 💖${profile.balances.happyChanceCards}</span></div>`).join("")}
+          ` : ""}
         `;
         document.getElementById("backupPreview").classList.remove("hidden");
-        document.getElementById("backupConfirmLabel").classList.remove("hidden");
-        document.getElementById("backupRestoreActions").classList.remove("hidden");
-        message.textContent = "内容を確認してください。まだ端末データは変更されていません。";
+        const legacyIntoActiveV2 = details.version === 1 && localStateMode === "v2";
+        document.getElementById("backupConfirmLabel").classList.toggle("hidden", legacyIntoActiveV2);
+        document.getElementById("backupRestoreActions").classList.toggle("hidden", legacyIntoActiveV2);
+        message.textContent = legacyIntoActiveV2
+          ? "version 1バックアップを確認しました。有効なv2へ直接上書きせず、legacy migrationの所有者選択フローで取り込んでください。"
+          : "内容を確認してください。まだ端末データは変更されていません。";
         message.className = "edit-error pay-message success";
       } catch (error) {
         pendingBackupEnvelope = null;
@@ -5191,6 +5269,10 @@
     function executeBackupRestore() {
       const message = document.getElementById("backupMessage");
       if (!pendingBackupEnvelope || !document.getElementById("backupConfirmCheckbox").checked) return;
+      if (pendingBackupEnvelope.version === 1 && localStateMode === "v2") {
+        message.textContent = "version 1バックアップは有効なv2へ直接復元できません。legacy migrationを使用してください。";
+        return;
+      }
       try {
         window.HapichikeBackup.restore(localStorage, pendingBackupEnvelope);
         message.textContent = "復元しました。画面を再読み込みします。";
@@ -6643,6 +6725,7 @@
     });
     document.getElementById("loginForm").addEventListener("submit", saveChildName);
     document.getElementById("changeNameBtn").addEventListener("click", openNameLogin);
+    document.getElementById("localChildSelector").addEventListener("change", switchLocalChild);
     document.addEventListener("keydown", event => {
       if (event.key === "Escape") {
         closeInfoModal();

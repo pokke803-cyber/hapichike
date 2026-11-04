@@ -18,6 +18,7 @@
 
   const V1_KEY = "kidsVegasCasino.v1";
   const V2_KEY = core.STORAGE_KEY;
+  const ACTIVATION_KEY = "kidsVegasCasino.v2.activation";
   const CLOUD_MAPPING_V1_KEY = "kidsVegasCasino.cloudMapping.v1";
   const SAFETY_KEY = "kidsVegasCasino.identityMigrationSafety.v1";
   const MIGRATION_VERSION = 1;
@@ -350,6 +351,7 @@
     core.assertSafeValue(safety, "migration safety");
     const safetyRaw = JSON.stringify(safety);
     const previousV2Raw = storage.getItem(V2_KEY);
+    const previousActivationRaw = storage.getItem(ACTIVATION_KEY);
     const originalV1Raw = prepared.sourceRaw;
     const originalMappingRaw = storage.getItem(CLOUD_MAPPING_V1_KEY);
     storage.setItem(SAFETY_KEY, safetyRaw);
@@ -371,6 +373,7 @@
     candidate.householdShared = prepared.merge.householdShared;
     candidate.activeLocalChildKey = localChildKey;
     candidate.identityMigrations = [...(Array.isArray(candidate.identityMigrations) ? candidate.identityMigrations : []), record];
+    candidate.activation = { status: "active", activatedAt: migratedAt };
     candidate.updatedAt = migratedAt;
     core.validateStore(candidate);
     const candidateRaw = JSON.stringify(candidate);
@@ -380,18 +383,23 @@
       if (readbackRaw !== candidateRaw) throw new Error("v2 readback did not match the migration write");
       const readback = core.parseStore(readbackRaw);
       if (!existingMigrationByHash(readback, prepared.sourceHash)) throw new Error("migration completion metadata was not persisted");
+      storage.setItem(ACTIVATION_KEY, "active");
+      if (storage.getItem(ACTIVATION_KEY) !== "active") throw new Error("v2 activation marker readback did not match");
       if (storage.getItem(V1_KEY) !== originalV1Raw) throw new Error("legacy v1 changed during migration");
       if (storage.getItem(CLOUD_MAPPING_V1_KEY) !== originalMappingRaw) throw new Error("cloudMapping v1 changed during migration");
       return { localChildKey, sourceHash: prepared.sourceHash, migrationVersion: MIGRATION_VERSION, safetyKey: SAFETY_KEY, profile: core.clone(profile), preview: core.clone(prepared.preview) };
     } catch (error) {
-      try { restoreRaw(storage, V2_KEY, previousV2Raw); }
+      try {
+        restoreRaw(storage, V2_KEY, previousV2Raw);
+        restoreRaw(storage, ACTIVATION_KEY, previousActivationRaw);
+      }
       catch { throw new Error(`migration and v2 rollback failed: ${error.message}`); }
       throw new Error(`migration failed; previous v2 was restored: ${error.message}`);
     }
   }
 
   return Object.freeze({
-    V1_KEY, V2_KEY, CLOUD_MAPPING_V1_KEY, SAFETY_KEY, MIGRATION_VERSION, SOURCE_NAME,
+    V1_KEY, V2_KEY, ACTIVATION_KEY, CLOUD_MAPPING_V1_KEY, SAFETY_KEY, MIGRATION_VERSION, SOURCE_NAME,
     canonicalize, sha256, inspectLegacyMigration, previewLegacyMigration, applyLegacyMigration,
   });
 });

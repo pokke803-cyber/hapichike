@@ -126,6 +126,7 @@ test("v2 backupは複数profile・activeLocalChildKey・householdSharedを含み
   assert.equal(envelope.data[backup.V2_STORAGE_KEY].householdShared.parentSettings.theme, "light");
   assert.doesNotMatch(JSON.stringify(envelope), /secret|accessToken|password/);
   assert.equal(backup.preview(envelope, sampleState()).profileCount, 2);
+  assert.deepEqual(backup.preview(envelope, sampleState()).profiles.map(item => item.childName), ["A", "C"]);
 });
 
 test("v2 restoreはv1互換を維持しv2 readback失敗時に両方rollbackする", () => {
