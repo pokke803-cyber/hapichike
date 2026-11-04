@@ -2865,7 +2865,7 @@
         <div class="account-chip" id="accountChip">
           <span id="childGreeting">こんにちは！</span>
           <label class="hidden" id="localChildSelectorLabel">
-            <span class="sr-only">操作する子ども</span>
+            <span>操作する子ども：</span>
             <select class="local-child-select" id="localChildSelector" aria-label="操作する子ども"></select>
           </label>
           <button type="button" id="changeNameBtn">なまえを変える</button>
@@ -3654,8 +3654,13 @@
     let bgmFallbackTimer = null;
     let bgmFallbackStep = 0;
     const sfxAudio = {};
-    applyAutomaticDailyReset();
-    if (needsStateSave) saveState();
+    try {
+      applyAutomaticDailyReset();
+      if (needsStateSave && !localStateBlockedError) saveState();
+    } catch (error) {
+      localStateMode = "blocked";
+      localStateBlockedError = error;
+    }
 
     function loadState() {
       const fallback = () => normalizeState({ childName: "", coins: 0, tasks: defaultTasks, history: [], payLogs: [], taskHistory: [], parentPassword: "1234", badges: [] });
@@ -3900,16 +3905,46 @@
       const label = document.getElementById("localChildSelectorLabel");
       const select = document.getElementById("localChildSelector");
       if (!label || !select) return;
-      let profiles = [];
-      try { profiles = window.HapichikeLocalState.listProfiles(localStorage); } catch {}
-      label.classList.toggle("hidden", profiles.length < 2);
-      select.replaceChildren(...profiles.map(profile => {
+      const makeOption = (value, text, selected = true) => {
         const option = document.createElement("option");
-        option.value = profile.localChildKey;
-        option.textContent = profile.childName;
-        option.selected = profile.active;
+        option.value = value;
+        option.textContent = text;
+        option.selected = selected;
         return option;
-      }));
+      };
+
+      if (localStateMode === "legacy") {
+        const legacyName = sanitizeName(state.childName);
+        label.classList.toggle("hidden", !legacyName);
+        select.disabled = true;
+        select.replaceChildren(...(legacyName ? [makeOption("legacy-single-profile", legacyName)] : []));
+        return;
+      }
+
+      if (localStateMode === "blocked") {
+        label.classList.remove("hidden");
+        select.disabled = true;
+        select.replaceChildren(makeOption("", "データ確認が必要です"));
+        return;
+      }
+
+      try {
+        const profiles = window.HapichikeLocalState.listProfiles(localStorage);
+        if (!profiles.length) throw new Error("V2_ACTIVE_PROFILE_MISSING");
+        label.classList.remove("hidden");
+        select.disabled = false;
+        select.replaceChildren(...profiles.map(profile => makeOption(
+          profile.localChildKey,
+          profile.childName,
+          profile.active
+        )));
+      } catch (error) {
+        localStateMode = "blocked";
+        localStateBlockedError = error;
+        label.classList.remove("hidden");
+        select.disabled = true;
+        select.replaceChildren(makeOption("", "データ確認が必要です"));
+      }
     }
 
     function switchLocalChild(event) {

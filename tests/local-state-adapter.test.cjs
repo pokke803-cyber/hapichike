@@ -29,7 +29,11 @@ function setup() {
   store.householdShared.taskMaster = [{ id: "shared", title: "Shared task" }];
   store.identityMigrations = [{ migrationVersion: 1, migratedAt: NOW, source: "legacy-single-profile", targetLocalChildKey: A, sourceHash: "a".repeat(64) }];
   const legacy = { childName: "Legacy", coins: 99, tasks: [], parentPassword: "2468", audioSettings: { bgmEnabled: true, sfxEnabled: true, bgmVolume: .2, sfxVolume: .6 } };
-  return new MemoryStorage({ [adapter.V1_KEY]: JSON.stringify(legacy), [adapter.V2_KEY]: JSON.stringify(store) });
+  return new MemoryStorage({
+    [adapter.V1_KEY]: JSON.stringify(legacy),
+    [adapter.V2_KEY]: JSON.stringify(store),
+    [adapter.ACTIVATION_KEY]: "active",
+  });
 }
 
 test("activated v2はactive profileをSource of Truthにしv1へwriteしない", () => {
@@ -97,6 +101,77 @@ test("legacy未移行はv1互換、activated invalid/missing activeはfail close
   const invalid = identity.createEmptyStore(NOW);
   storage.setItem(adapter.V2_KEY, JSON.stringify(invalid));
   assert.throws(() => adapter.load(storage), /ACTIVE_CHILD_MISSING/);
+});
+
+test("v2が存在しなくてもlegacy childName・残高・tasksをそのまま読む", () => {
+  const legacy = { childName: "D", coins: 7, tasks: [{ id: "legacy-task" }] };
+  const storage = new MemoryStorage({ [adapter.V1_KEY]: JSON.stringify(legacy) });
+  const loaded = adapter.load(storage);
+  assert.equal(loaded.mode, "legacy");
+  assert.equal(loaded.state.childName, "D");
+  assert.equal(loaded.state.coins, 7);
+  assert.deepEqual(loaded.state.tasks, [{ id: "legacy-task" }]);
+});
+
+test("profiles 0件の未activation v2があってもlegacy modeを維持する", () => {
+  const legacy = { childName: "D", coins: 3, tasks: [] };
+  const storage = new MemoryStorage({
+    [adapter.V1_KEY]: JSON.stringify(legacy),
+    [adapter.V2_KEY]: JSON.stringify(identity.createEmptyStore(NOW)),
+  });
+  assert.equal(adapter.load(storage).mode, "legacy");
+  assert.deepEqual(adapter.listProfiles(storage), []);
+});
+
+test("migration metadataやstore内activationだけではv2をactivationしない", () => {
+  const storage = setup();
+  storage.removeItem(adapter.ACTIVATION_KEY);
+  const store = JSON.parse(storage.getItem(adapter.V2_KEY));
+  store.activation = { status: "active", activatedAt: NOW };
+  storage.setItem(adapter.V2_KEY, JSON.stringify(store));
+  const loaded = adapter.load(storage);
+  assert.equal(loaded.mode, "legacy");
+  assert.equal(loaded.state.childName, "Legacy");
+});
+
+test("activation markerとvalid active profileが揃った時だけmulti-profile modeになる", () => {
+  const storage = setup();
+  const loaded = adapter.load(storage);
+  assert.equal(loaded.mode, "v2");
+  assert.equal(loaded.store.activeLocalChildKey, A);
+  assert.equal(loaded.state.childName, "Child A");
+});
+
+test("activated profilesはchildNameでなくlocalChildKeyをselector valueに使う", () => {
+  const profiles = adapter.listProfiles(setup());
+  assert.deepEqual(profiles.map(item => item.localChildKey), [A, C]);
+  assert.deepEqual(profiles.map(item => item.childName), ["Child A", "Child C"]);
+  assert.equal(profiles.find(item => item.active).localChildKey, A);
+});
+
+test("activation済みactive key missingはlegacyへfallbackしない", () => {
+  const storage = setup();
+  const store = JSON.parse(storage.getItem(adapter.V2_KEY));
+  store.activeLocalChildKey = null;
+  storage.setItem(adapter.V2_KEY, JSON.stringify(store));
+  assert.throws(() => adapter.load(storage), /ACTIVE_CHILD_MISSING/);
+});
+
+test("activation済みactive profile invalidはlegacyへfallbackしない", () => {
+  const storage = setup();
+  const store = JSON.parse(storage.getItem(adapter.V2_KEY));
+  store.profiles[A].localChildKey = C;
+  storage.setItem(adapter.V2_KEY, JSON.stringify(store));
+  assert.throws(() => adapter.load(storage), /V2_FAIL_CLOSED|does not match|mismatch/);
+});
+
+test("未activationのload/listProfilesはv2にもmappingにもwriteしない", () => {
+  const storage = setup();
+  storage.removeItem(adapter.ACTIVATION_KEY);
+  const before = new Map(storage.values);
+  assert.equal(adapter.load(storage).mode, "legacy");
+  assert.deepEqual(adapter.listProfiles(storage), []);
+  assert.deepEqual(storage.values, before);
 });
 
 test("safe write失敗はv2/device/activationをまとめてrollback", () => {

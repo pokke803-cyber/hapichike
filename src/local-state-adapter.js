@@ -85,8 +85,7 @@
       if (markerActive) throw new Error(`V2_FAIL_CLOSED: ${error.message}`);
       return { mode: "legacy", state: readLegacy(storage, fallbackFactory), store: null };
     }
-    const activated = markerActive || isActivatedStore(store);
-    if (!activated) return { mode: "legacy", state: readLegacy(storage, fallbackFactory), store };
+    if (!markerActive) return { mode: "legacy", state: readLegacy(storage, fallbackFactory), store };
     if (!store) throw new Error("V2_FAIL_CLOSED: activated store is missing");
     const profile = requireActiveProfile(store);
     const legacy = readLegacy(storage, () => ({})) || {};
@@ -125,10 +124,7 @@
   }
 
   function saveActive(storage, runtimeState, now = new Date().toISOString()) {
-    if (!hasActivationMarker(storage)) {
-      const candidate = readV2(storage);
-      if (!isActivatedStore(candidate)) throw new Error("V2_NOT_ACTIVATED");
-    }
+    if (!hasActivationMarker(storage)) throw new Error("V2_NOT_ACTIVATED");
     const store = readV2(storage);
     const current = requireActiveProfile(store);
     const next = clone(store);
@@ -177,7 +173,7 @@
 
   function listProfiles(storage) {
     const store = readV2(storage);
-    if (!store || !(hasActivationMarker(storage) || isActivatedStore(store))) return [];
+    if (!store || !hasActivationMarker(storage)) return [];
     requireActiveProfile(store);
     return Object.values(store.profiles).map(profile => ({
       localChildKey: profile.localChildKey,
@@ -188,7 +184,7 @@
 
   function switchActive(storage, localChildKey, now = new Date().toISOString()) {
     const store = readV2(storage);
-    if (!store || !(hasActivationMarker(storage) || isActivatedStore(store))) throw new Error("V2_NOT_ACTIVATED");
+    if (!store || !hasActivationMarker(storage)) throw new Error("V2_NOT_ACTIVATED");
     core.validateLocalChildKey(localChildKey);
     if (!store.profiles[localChildKey]) throw new Error("V2_ACTIVE_PROFILE_MISSING");
     const next = clone(store);
