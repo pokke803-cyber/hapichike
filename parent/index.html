@@ -124,14 +124,79 @@
               <div class="read-only-badge">閲覧専用</div>
             </section>
 
-            <a class="cloud-link-card" href="/#parent-cloud">
-              <span class="cloud-link-icon" aria-hidden="true">☁️</span>
-              <span>
-                <strong>Local / Cloud比較・初回登録状態を確認</strong>
-                <small>この端末の親設定に移動します。表示しただけではimportを実行しません。</small>
-              </span>
-              <span class="cloud-link-arrow" aria-hidden="true">›</span>
-            </a>
+            <section id="cloudManagement" class="cloud-management" aria-labelledby="cloudManagementTitle">
+              <div class="section-heading">
+                <div><p class="eyebrow">PARENT CLOUD MANAGEMENT</p><h2 id="cloudManagementTitle">クラウド管理</h2></div>
+                <span class="read-only-badge">親の明示承認が必要</span>
+              </div>
+              <p class="support-text">Cloud Childの切替とLocal profileの選択は独立しています。自動対応付け・自動移行・差分加算は行いません。</p>
+
+              <article class="management-card identity-card">
+                <h3>Child identity</h3>
+                <div class="identity-grid">
+                  <div><strong>Cloud</strong><p id="cloudIdentityName"></p></div>
+                  <label><strong>Local</strong><select id="localProfileSelect"></select></label>
+                  <div><strong>Mapping</strong><p id="identityMappingState"></p></div>
+                </div>
+              </article>
+
+              <div class="management-grid">
+                <article class="management-card"><h3>Local identity</h3><p id="localIdentitySummary"></p></article>
+                <article class="management-card"><h3>Mapping状態</h3><p id="mappingSummary"></p><p id="mappingDetails" class="detail-text"></p></article>
+                <article class="management-card"><h3>Initial import状態</h3><p id="importSummary"></p><p id="importDetails" class="detail-text"></p></article>
+                <article class="management-card"><h3>Backup状態</h3><p id="backupSummary"></p><p id="backupDetails" class="detail-text"></p></article>
+              </div>
+
+              <article class="management-card comparison-card">
+                <div class="card-heading"><div><h3>Backup / restore</h3><p class="detail-text">legacy v1、v2 profiles、household shared、active local childを含め、秘密情報を除外します。</p></div><button id="createBackupButton" class="primary-button" type="button">backupを作成</button></div>
+                <div class="backup-inline-actions"><button id="selectRestoreButton" class="secondary-button" type="button">backupを読み込む</button><input id="restoreFileInput" type="file" accept="application/json,.json" hidden></div>
+                <pre id="restorePreviewResult" class="preview-result">復元ファイルはまだ選択されていません。</pre>
+                <label id="restoreApprovalLabel" class="approval-line" hidden><input id="restoreApproval" type="checkbox"> 現在のLocalデータをこのbackupで置き換えることを確認しました</label>
+                <button id="executeRestoreButton" class="danger-button" type="button" hidden disabled>Local restoreを実行</button>
+                <p id="backupActionMessage" class="action-message" role="status"></p>
+              </article>
+
+              <article class="management-card comparison-card">
+                <h3>Local / Cloud 6残高比較</h3>
+                <p id="comparisonMessage" class="detail-text"></p>
+                <div class="table-scroll"><table><thead><tr><th>項目</th><th>Local</th><th>Cloud</th><th>差分</th></tr></thead><tbody id="comparisonBody"></tbody></table></div>
+              </article>
+
+              <article class="management-card comparison-card">
+                <div class="card-heading"><div><h3>Legacy → v2 migration</h3><p class="detail-text">この端末の旧データの所有者を、現在表示中のCloud Childとして明示確認します。Cloud writeは0です。</p></div><button id="migrationPreviewButton" class="secondary-button" type="button">previewを表示</button></div>
+                <pre id="migrationPreviewResult" class="preview-result"></pre>
+                <fieldset id="migrationApprovals" class="approval-list" disabled>
+                  <label><input type="checkbox" data-migration-approval="owner"> この旧データが表示中のCloud Childのものです</label>
+                  <label><input type="checkbox" data-migration-approval="backup"> current backupを確認しました</label>
+                  <label><input type="checkbox" data-migration-approval="preview"> previewと競合状態を確認しました</label>
+                  <label><input type="checkbox" data-migration-approval="cloud"> migrationではCloudへ書き込まないことを確認しました</label>
+                </fieldset>
+                <button id="migrationApplyButton" class="danger-button" type="button" disabled>Legacy migrationを実行</button>
+                <p id="migrationActionMessage" class="action-message" role="status"></p>
+              </article>
+
+              <article class="management-card comparison-card">
+                <div class="card-heading"><div><h3>Cloud mapping</h3><p id="mappingPreviewMessage" class="detail-text">Local profileとCloud Childを選択してください。</p></div><button id="mappingPreviewButton" class="secondary-button" type="button">mapping preview</button></div>
+                <label class="approval-line"><input id="mappingApproval" type="checkbox" disabled> 表示されたLocalとCloudの対応を確認しました</label>
+                <button id="mappingSaveButton" class="danger-button" type="button" disabled>mappingを保存</button>
+                <p id="mappingActionMessage" class="action-message" role="status"></p>
+              </article>
+
+              <article class="management-card comparison-card">
+                <div class="card-heading"><div><h3>Initial import</h3><p class="detail-text">Localの6残高を差分ではなく絶対snapshotとして、未初期化Cloud Childへ1回だけ登録します。</p></div><button id="importPreviewButton" class="secondary-button" type="button">import preview</button></div>
+                <pre id="importPreviewResult" class="preview-result">readinessとmappingを確認してください。</pre>
+                <fieldset id="importApprovals" class="approval-list" disabled>
+                  <label><input type="checkbox" data-import-approval="backup"> current backupを確認しました</label>
+                  <label><input type="checkbox" data-import-approval="mapping"> mappingを確認しました</label>
+                  <label><input type="checkbox" data-import-approval="snapshot"> 6残高の絶対snapshotを確認しました</label>
+                  <label><input type="checkbox" data-import-approval="oneTime"> 初回登録は1回だけであることを確認しました</label>
+                </fieldset>
+                <button id="importExecuteButton" class="danger-button" type="button" disabled>initial importを実行</button>
+                <p id="importActionMessage" class="action-message" role="status"></p>
+              </article>
+
+              <article class="management-card comparison-card"><h3>Diagnostic</h3><dl id="diagnosticGrid" class="runtime-grid"></dl></article>
+            </section>
 
             <section aria-labelledby="balanceTitle">
               <div class="section-heading">

@@ -3164,12 +3164,12 @@
             端末データのバックアップ書き出し・確認・復元ができます。
           </button>
           <button class="parent-menu-button" type="button" id="openProfileMigrationBtn">
-            <strong>👤 子どもデータの移行</strong>
-            現在の端末データを、確認後に子ども別のローカルプロフィールへ移行します。
+            <strong>👤 子どもデータの移行（みまもりダッシュボード）</strong>
+            クラウド管理はみまもりダッシュボードで行います。
           </button>
           <button class="parent-menu-button" type="button" id="openCloudMappingBtn">
-            <strong>☁️ クラウド連携</strong>
-            local / cloud比較、子どもの対応付け、初回データ登録の準備を確認できます。
+            <strong>☁️ クラウド管理（みまもりダッシュボード）</strong>
+            Local / Cloud比較、mapping、初回登録はみまもりダッシュボードで行います。
           </button>
         </div>
         <div class="parent-save-row">
@@ -6604,8 +6604,8 @@
     document.getElementById("openParentTicketGiftBtn").addEventListener("click", openParentTicketGift);
     document.getElementById("openParentEmailSettingsBtn").addEventListener("click", openParentEmailSettings);
     document.getElementById("openBackupRestoreBtn").addEventListener("click", openBackupRestore);
-    document.getElementById("openProfileMigrationBtn").addEventListener("click", openProfileMigration);
-    document.getElementById("openCloudMappingBtn").addEventListener("click", openCloudMapping);
+    document.getElementById("openProfileMigrationBtn").addEventListener("click", () => window.location.assign("/parent/"));
+    document.getElementById("openCloudMappingBtn").addEventListener("click", () => window.location.assign("/parent/"));
     document.getElementById("parentRewardBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentPayTransferBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentEmailBackBtn").addEventListener("click", openParentMenu);

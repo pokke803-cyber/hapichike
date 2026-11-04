@@ -56,6 +56,7 @@
       viewedChildData: { status: "not_loaded", errorCode: null },
       viewedChildBalance: null,
       viewedChildRewardLogs: [],
+      viewedChildSyncState: null,
       local: {
         legacyStatus: "loading",
         v2Status: "loading",
@@ -80,6 +81,7 @@
       viewedChildData: { status: "not_loaded", errorCode: null },
       viewedChildBalance: null,
       viewedChildRewardLogs: [],
+      viewedChildSyncState: null,
     };
   }
 
@@ -125,7 +127,11 @@
     if (!item || typeof item.id !== "string" || !item.id) {
       throw new ParentRuntimeContractError(ERROR_CODES.HOUSEHOLD_LOAD_FAILED);
     }
-    return { id: item.id, name: typeof item.name === "string" ? item.name : "" };
+    return {
+      id: item.id,
+      name: typeof item.name === "string" ? item.name : "",
+      membershipRole: typeof item.membership_role === "string" ? item.membership_role : null,
+    };
   }
 
   function applyHouseholdsLoaded(state, households) {
@@ -163,6 +169,7 @@
       viewedChildData: { status: "not_loaded", errorCode: null },
       viewedChildBalance: null,
       viewedChildRewardLogs: [],
+      viewedChildSyncState: null,
     };
   }
 
@@ -193,6 +200,7 @@
       viewedChildData: selectionStillValid ? state.viewedChildData : { status: "not_loaded", errorCode: null },
       viewedChildBalance: selectionStillValid ? state.viewedChildBalance : null,
       viewedChildRewardLogs: selectionStillValid ? state.viewedChildRewardLogs : [],
+      viewedChildSyncState: selectionStillValid ? state.viewedChildSyncState : null,
       connection: { status: "ready", errorCode: null },
     };
   }
@@ -215,6 +223,7 @@
       viewedChildData: { status: "not_loaded", errorCode: null },
       viewedChildBalance: null,
       viewedChildRewardLogs: [],
+      viewedChildSyncState: null,
     };
   }
 
@@ -225,6 +234,7 @@
       viewedChildData: { status: "not_loaded", errorCode: null },
       viewedChildBalance: null,
       viewedChildRewardLogs: [],
+      viewedChildSyncState: null,
     };
   }
 
@@ -237,10 +247,11 @@
       viewedChildData: { status: "loading", errorCode: null },
       viewedChildBalance: null,
       viewedChildRewardLogs: [],
+      viewedChildSyncState: null,
     };
   }
 
-  function applyViewedChildData(state, childId, balance, rewardLogs) {
+  function applyViewedChildData(state, childId, balance, rewardLogs, syncState = null) {
     if (childId !== state.parentViewedSupabaseChildId) {
       throw new ParentRuntimeContractError(ERROR_CODES.CHILD_SELECTION_INVALID);
     }
@@ -249,6 +260,7 @@
       viewedChildData: { status: "ready", errorCode: null },
       viewedChildBalance: balance === null ? null : clone(balance),
       viewedChildRewardLogs: clone(rewardLogs ?? []),
+      viewedChildSyncState: syncState === null ? null : clone(syncState),
       connection: { status: "ready", errorCode: null },
     };
   }
@@ -259,6 +271,7 @@
       viewedChildData: { status: "error", errorCode: ERROR_CODES.CHILD_LOAD_FAILED },
       viewedChildBalance: null,
       viewedChildRewardLogs: [],
+      viewedChildSyncState: null,
       connection: { status: "error", errorCode: ERROR_CODES.CONNECTION_FAILED },
     };
   }

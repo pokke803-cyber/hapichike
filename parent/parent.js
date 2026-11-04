@@ -5,12 +5,18 @@ import {
 } from "../src/services/api/authApi.js";
 import { getCurrentHouseholds } from "../src/services/api/householdsApi.js";
 import { getChildrenByHousehold } from "../src/services/api/childrenApi.js";
-import { getChildBalances } from "../src/services/api/rewardsApi.js";
+import { getChildAppSyncState, getChildBalances, importInitialHapichikeSnapshot } from "../src/services/api/rewardsApi.js";
 import { getRecentRewardLogs } from "../src/services/api/historyApi.js";
 import "../src/parent/parent-runtime-core.js";
 import "../src/child-identity-core.js";
 import "../src/backup-core.js";
+import "../src/cloud-mapping-core.js";
+import "../src/initial-import-core.js";
+import "../src/profile-domain.js";
+import "../src/profile-migration.js";
 import "../src/parent/parent-runtime.js";
+import "../src/parent/cloud-management-core.js";
+import "../src/parent/cloud-management-actions.js";
 
 const elements = Object.fromEntries([
   "configView", "loginView", "loadingView", "dashboardView", "loginForm", "emailInput", "passwordInput",
@@ -21,13 +27,20 @@ const elements = Object.fromEntries([
   "balanceGrid", "balanceUpdated", "choresList", "logsLoading", "logsList", "refreshRuntimeButton",
   "refreshChildButton", "authStatus", "connectionStatus", "householdStatus", "childrenStatus", "localV1Status", "localV2Status",
   "detailsStatus", "finalStatus", "localProfileStatus",
+  "cloudManagement", "mappingSummary", "mappingDetails", "localIdentitySummary", "comparisonMessage", "comparisonBody",
+  "importSummary", "importDetails", "backupSummary", "backupDetails", "diagnosticGrid", "migrationPreviewButton", "migrationPreviewResult",
+  "cloudIdentityName", "localProfileSelect", "identityMappingState", "createBackupButton", "selectRestoreButton", "restoreFileInput",
+  "restorePreviewResult", "restoreApprovalLabel", "restoreApproval", "executeRestoreButton", "backupActionMessage",
+  "migrationApprovals", "migrationApplyButton", "migrationActionMessage", "mappingPreviewMessage", "mappingPreviewButton",
+  "mappingApproval", "mappingSaveButton", "mappingActionMessage", "importPreviewButton", "importPreviewResult", "importApprovals",
+  "importExecuteButton", "importActionMessage",
 ].map(id => [id, document.getElementById(id)]));
 
 const runtime = globalThis.HapichikeParentRuntime.createParentRuntime({
   authApi: { getParentSession, onParentAuthStateChange },
   householdsApi: { getCurrentHouseholds },
   childrenApi: { getChildrenByHousehold },
-  rewardsApi: { getChildBalances },
+  rewardsApi: { getChildBalances, getChildAppSyncState },
   historyApi: { getRecentRewardLogs },
   storage: window.localStorage,
   parsers: {
@@ -35,6 +48,12 @@ const runtime = globalThis.HapichikeParentRuntime.createParentRuntime({
     parseV2: globalThis.HapichikeChildIdentity.parseStore,
   },
 });
+let migrationPreview = null;
+let mappingPreview = null;
+let initialImportPreview = null;
+let pendingRestoreEnvelope = null;
+let selectedLocalChildKey = "";
+let importing = false;
 
 function showOnly(view) {
   [elements.configView, elements.loginView, elements.loadingView, elements.dashboardView]
@@ -86,6 +105,112 @@ function renderRuntimeStatus(state) {
   elements.detailsStatus.textContent = statusLabel(state.viewedChildData.status);
   elements.finalStatus.textContent = statusLabel(state.runtime.status);
   elements.localProfileStatus.textContent = `${state.local.profileCount ?? 0}件${state.local.activeLocalChildExists ? "・選択あり" : ""}`;
+}
+
+function valueLabel(value) { return value === null || value === undefined ? "--" : String(value); }
+
+function selectedChild(state) {
+  return state.cloudChildren.items.find(item => item.id === state.parentViewedSupabaseChildId) ?? null;
+}
+
+function localProfiles() {
+  try { return globalThis.HapichikeParentCloudActions.readLocalProfiles(window.localStorage); }
+  catch { return []; }
+}
+
+function resetActionPreviews() {
+  mappingPreview = null;
+  initialImportPreview = null;
+  elements.mappingApproval.checked = false;
+  elements.mappingApproval.disabled = true;
+  elements.importApprovals.querySelectorAll("input").forEach(input => { input.checked = false; });
+  elements.importApprovals.disabled = true;
+  elements.mappingPreviewMessage.textContent = "Local profileとCloud Childを選択してください。";
+  elements.importPreviewResult.textContent = "readinessとmappingを確認してください。";
+}
+
+function selectedBackupCurrent() {
+  try {
+    const profile = globalThis.HapichikeParentCloudActions.requireProfile(window.localStorage, selectedLocalChildKey);
+    const metadata = globalThis.HapichikeInitialImport.readBackupMetadata(window.localStorage);
+    return Boolean(metadata && globalThis.HapichikeInitialImport.isBackupCurrent(metadata, profile.balances));
+  } catch { return false; }
+}
+
+function renderActionButtons(model) {
+  const migrationChecks = [...elements.migrationApprovals.querySelectorAll("input")];
+  let legacyBackupCurrent = false;
+  try {
+    const legacy = globalThis.HapichikeParentCloudActions.requireProfile(window.localStorage, globalThis.HapichikeCloudMapping.LOCAL_CHILD_KEY);
+    const metadata = globalThis.HapichikeInitialImport.readBackupMetadata(window.localStorage);
+    legacyBackupCurrent = Boolean(metadata && globalThis.HapichikeInitialImport.isBackupCurrent(metadata, legacy.balances));
+  } catch { /* unavailable */ }
+  elements.migrationApprovals.disabled = !(migrationPreview?.canApply && legacyBackupCurrent);
+  elements.migrationApplyButton.disabled = elements.migrationApprovals.disabled || !migrationChecks.every(input => input.checked);
+  elements.mappingSaveButton.disabled = !mappingPreview || !elements.mappingApproval.checked;
+  const approvals = Object.fromEntries([...elements.importApprovals.querySelectorAll("input")].map(input => [input.dataset.importApproval, input.checked]));
+  elements.importExecuteButton.disabled = !globalThis.HapichikeParentCloudActions.canExecuteImport({
+    readiness: model.initialImport.readiness, approvals, importing, preview: initialImportPreview,
+    childId: model.selectedChild?.id, mappingValid: model.mapping.status === "valid" && model.mapping.viewedChildMatches,
+  });
+}
+
+function renderCloudManagement(state) {
+  elements.cloudManagement.hidden = !state.parentViewedSupabaseChildId;
+  if (!state.parentViewedSupabaseChildId) return;
+  const model = globalThis.HapichikeParentCloudManagement.inspect(window.localStorage, state);
+  const map = model.mapping;
+  const profiles = localProfiles();
+  if (selectedLocalChildKey && !profiles.some(profile => profile.localChildKey === selectedLocalChildKey)) selectedLocalChildKey = "";
+  if (!selectedLocalChildKey) selectedLocalChildKey = profiles.find(profile => profile.active)?.localChildKey ?? "";
+  const profileOptions = [Object.assign(document.createElement("option"), { value: "", textContent: "Local profileを明示選択" })];
+  profiles.forEach(profile => {
+    const option = document.createElement("option");
+    option.value = profile.localChildKey;
+    option.textContent = `${profile.displayName}（${profile.kind} / ${profile.localChildKey}）`;
+    option.selected = profile.localChildKey === selectedLocalChildKey;
+    profileOptions.push(option);
+  });
+  elements.localProfileSelect.replaceChildren(...profileOptions);
+  elements.cloudIdentityName.textContent = `${model.selectedChild?.displayName ?? "未選択"} / ${model.selectedChild?.id ?? "--"}`;
+  elements.identityMappingState.textContent = map.viewedChildMatches ? `Connected: ${map.item.localChildKey}` : "Not connected";
+  elements.localIdentitySummary.textContent = `Legacy v1: ${statusLabel(state.local.legacyStatus)} / v2: ${statusLabel(state.local.v2Status)} / v2 profile: ${state.local.profileCount}件 / active key: ${state.local.activeLocalChildExists ? "あり" : "なし"}`;
+  elements.mappingSummary.textContent = `${({ valid: "mappingあり（valid）", stale: "mappingあり（stale）", missing: "mappingなし", invalid: "mapping invalid" })[map.status]} / ${map.version === 2 ? "v2" : "legacy v1 compatibility"}`;
+  elements.mappingDetails.textContent = map.item
+    ? `localChildKey: ${map.item.localChildKey} / mapped Supabase Child: ${map.item.supabaseChildId} / household: ${map.householdMatches ? "一致" : "不一致"}。${map.viewedChildMatches ? "このLocal profileは現在表示中のChildに対応しています" : "現在表示中のChildとは対応していません"}`
+    : "比較対象のLocal profileが未確定です。Local profileの所有者が未確定です。";
+  elements.comparisonMessage.textContent = model.localProfile.unresolved
+    ? "比較対象のLocal profileが未確定です。名前だけでは対応付けません。"
+    : `${model.localProfile.source} とCloudを比較しています。${model.mismatch ? "ローカルとクラウドの残高が一致していません" : "6残高は一致しています"}`;
+  elements.comparisonBody.replaceChildren(...model.comparison.map(row => {
+    const tr = document.createElement("tr");
+    [row.label, valueLabel(row.local), valueLabel(row.cloud), row.difference === null ? "--" : `${row.difference > 0 ? "+" : ""}${row.difference}`].forEach(value => { const td = document.createElement("td"); td.textContent = value; tr.append(td); });
+    return tr;
+  }));
+  const sync = model.initialImport.syncState;
+  const readiness = model.initialImport.readiness;
+  elements.importSummary.textContent = sync?.initial_import_completed_at ? "Initial import completed" : readiness.cloudInitialized ? "Cloud already initialized / Initial import not completed" : "Initial import not completed";
+  elements.importDetails.textContent = `sync state: ${sync ? "あり" : "なし"} / completed_at: ${sync?.initial_import_completed_at ?? "なし"} / import version: ${sync?.import_version ?? "なし"} / Cloud initialized: ${readiness.cloudInitialized ? "はい" : "いいえ"} / import eligible: ${readiness.ready ? "eligible" : "not eligible"}`;
+  elements.backupSummary.textContent = model.backup.present ? `backupあり / ${selectedBackupCurrent() ? "選択中Localのcurrent snapshotと一致" : "選択中Localに対してoutdated"}` : "backupなし";
+  elements.backupDetails.textContent = model.backup.metadata?.backup_created_at
+    ? `created_at: ${new Date(model.backup.metadata.backup_created_at).toLocaleString("ja-JP")}` : "created_at: --";
+  elements.diagnosticGrid.replaceChildren(...Object.entries(model.diagnostic).map(([key, value]) => { const div = document.createElement("div"); const dt = document.createElement("dt"); const dd = document.createElement("dd"); dt.textContent = key; dd.textContent = statusLabel(value); div.append(dt, dd); return div; }));
+  if (migrationPreview?.targetCloudChild.id !== state.parentViewedSupabaseChildId) migrationPreview = null;
+  renderMigrationPreview();
+  renderActionButtons(model);
+}
+
+function renderMigrationPreview() {
+  if (!migrationPreview) { elements.migrationPreviewResult.textContent = "明示的にpreviewした場合だけLegacyデータを読み取ります。"; return; }
+  const p = migrationPreview;
+  elements.migrationPreviewResult.textContent = [
+    `source childName: ${p.sourceChildName}`, `target Cloud Child: ${p.targetCloudChild.displayName}`, `新規localChildKey: ${p.plannedLocalChildKey}`,
+    `6残高: ${Object.values(p.balances).join(" / ")}`, `task件数: ${p.taskAssignments}`, `history件数: ${p.historyCount}`,
+    `progress: badge ${p.progress.badgeCount}件`, `reset state: ${p.resetState.lastDailyResetKey || "なし"}`,
+    `householdShared: task master ${p.householdShared.taskMasterCount}件`, `legacyExtras: profile ${p.legacyExtras.profileCount} / household ${p.legacyExtras.householdCount}`,
+    `secret除外: ${p.excludedSecretFields.join(", ") || "なし"}`, `conflict: ${p.conflicts.join(", ") || "なし"}`,
+    p.balanceMismatch ? "ローカルとクラウドの残高が一致していません" : "ローカルとクラウドの残高は一致しています",
+  ].join("\n");
 }
 
 function renderHouseholds(state) {
@@ -265,6 +390,7 @@ function render(state) {
   elements.refreshChildButton.disabled = loading;
   renderBalance(state.viewedChildBalance);
   renderLogs(state.viewedChildRewardLogs);
+  renderCloudManagement(state);
 }
 
 runtime.subscribe(render);
@@ -318,6 +444,189 @@ elements.refreshRuntimeButton.addEventListener("click", async () => {
   await runtime.initializeParentRuntime();
 });
 elements.refreshChildButton.addEventListener("click", () => { void runtime.refreshViewedChildData(); });
+elements.migrationPreviewButton.addEventListener("click", () => {
+  const state = runtime.getState();
+  const child = selectedChild(state);
+  try { migrationPreview = globalThis.HapichikeParentCloudManagement.previewLegacy(window.localStorage, child, state.viewedChildBalance); }
+  catch { migrationPreview = null; elements.migrationPreviewResult.textContent = "LOCAL_INVALID: Legacy migration previewを作成できませんでした。"; return; }
+  elements.migrationApprovals.querySelectorAll("input").forEach(input => { input.checked = false; });
+  elements.migrationActionMessage.textContent = "実行前に対象Childと4項目を目視確認してください。";
+  renderMigrationPreview();
+  renderCloudManagement(state);
+});
+
+function actionError(error) {
+  const code = globalThis.HapichikeParentCloudActions.safeError(error);
+  return ({
+    AUTH_REQUIRED: "AUTH_REQUIRED: 親ログインが必要です。", HOUSEHOLD_LOAD_FAILED: "HOUSEHOLD_LOAD_FAILED: Householdを再読込してください。",
+    CHILD_LOAD_FAILED: "CHILD_LOAD_FAILED: Child一覧が古い可能性があります。再読込してください。", LOCAL_INVALID: "LOCAL_INVALID: Local profileを確認してください。",
+    BACKUP_REQUIRED: "BACKUP_REQUIRED: 現在のLocal snapshotに一致するbackupが必要です。", MAPPING_REQUIRED: "MAPPING_REQUIRED: mappingを先に保存してください。",
+    MAPPING_CONFLICT: "MAPPING_CONFLICT: 同じCloud Childへの重複または家庭不一致です。", CLOUD_INITIALIZED: "CLOUD_INITIALIZED: Cloudは初期化済みのためimportできません。",
+    IMPORT_NOT_ALLOWED: "IMPORT_NOT_ALLOWED: readiness条件を満たしていません。", MIGRATION_CONFLICT: "MIGRATION_CONFLICT: preview・競合・承認を確認してください。",
+    NETWORK_ERROR: "NETWORK_ERROR: 接続を確認し、状態を再読込してください。",
+  })[code];
+}
+
+function setActionMessage(element, message, success = false) {
+  element.textContent = message;
+  element.classList.toggle("is-success", success);
+}
+
+function downloadBackup(envelope) {
+  const blob = new Blob([`${JSON.stringify(envelope, null, 2)}\n`], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = globalThis.HapichikeBackup.filename(new Date(envelope.createdAt));
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+elements.localProfileSelect.addEventListener("change", () => {
+  selectedLocalChildKey = elements.localProfileSelect.value;
+  resetActionPreviews();
+  renderCloudManagement(runtime.getState());
+});
+
+elements.createBackupButton.addEventListener("click", () => {
+  try {
+    if (!selectedLocalChildKey) throw new Error("LOCAL_INVALID");
+    const result = globalThis.HapichikeParentCloudActions.createBackup(window.localStorage, selectedLocalChildKey);
+    downloadBackup(result.envelope);
+    setActionMessage(elements.backupActionMessage, `backupを作成しました（format v${result.envelope.version} / ${result.profile.displayName}）。`, true);
+    renderCloudManagement(runtime.getState());
+  } catch (error) { setActionMessage(elements.backupActionMessage, actionError(error)); }
+});
+
+elements.selectRestoreButton.addEventListener("click", () => elements.restoreFileInput.click());
+elements.restoreFileInput.addEventListener("change", async () => {
+  pendingRestoreEnvelope = null;
+  elements.restoreApproval.checked = false;
+  elements.executeRestoreButton.disabled = true;
+  const file = elements.restoreFileInput.files?.[0];
+  if (!file) return;
+  try {
+    const envelope = globalThis.HapichikeBackup.parseBackup(await file.text());
+    const current = JSON.parse(window.localStorage.getItem(globalThis.HapichikeBackup.STORAGE_KEY) || "null");
+    const details = globalThis.HapichikeBackup.preview(envelope, current);
+    pendingRestoreEnvelope = envelope;
+    elements.restorePreviewResult.textContent = [`created_at: ${details.createdAt}`, `format version: ${details.version}`, `childName: ${details.childName}`, `v2 profiles: ${details.profileCount}`, `activeLocalChildKey: ${details.activeLocalChildKey || "なし"}`, ...details.rows.map(row => `${row[0]}: ${valueLabel(row[1])} → ${valueLabel(row[2])}`)].join("\n");
+    elements.restoreApprovalLabel.hidden = false;
+    elements.executeRestoreButton.hidden = false;
+    setActionMessage(elements.backupActionMessage, "restore previewです。まだLocalデータは変更されていません。", true);
+  } catch (error) { setActionMessage(elements.backupActionMessage, actionError(error)); }
+});
+elements.restoreApproval.addEventListener("change", () => { elements.executeRestoreButton.disabled = !pendingRestoreEnvelope || !elements.restoreApproval.checked; });
+elements.executeRestoreButton.addEventListener("click", () => {
+  if (!pendingRestoreEnvelope || !elements.restoreApproval.checked) return;
+  try { globalThis.HapichikeBackup.restore(window.localStorage, pendingRestoreEnvelope); window.location.reload(); }
+  catch (error) { setActionMessage(elements.backupActionMessage, actionError(error)); }
+});
+
+elements.migrationApprovals.addEventListener("change", () => renderCloudManagement(runtime.getState()));
+elements.migrationApplyButton.addEventListener("click", async () => {
+  const state = runtime.getState();
+  const checks = Object.fromEntries([...elements.migrationApprovals.querySelectorAll("input")].map(input => [input.dataset.migrationApproval, input.checked]));
+  try {
+    const refreshed = await verifyImportPreflight(state);
+    const target = refreshed.children.find(child => child.id === state.parentViewedSupabaseChildId);
+    const result = globalThis.HapichikeParentCloudActions.applyMigration(window.localStorage, {
+      preview: migrationPreview, targetChild: target, householdId: state.selectedHouseholdId, visibleChildren: refreshed.children,
+      parentApproved: checks.owner, backupApproved: checks.backup, previewApproved: checks.preview, cloudWriteZeroApproved: checks.cloud,
+    });
+    selectedLocalChildKey = result.localChildKey;
+    migrationPreview = null;
+    setActionMessage(elements.migrationActionMessage, `migration完了: ${result.localChildKey}。v1とsafety copyは保持されています。`, true);
+    void runtime.readLocalIdentityState();
+  } catch (error) { setActionMessage(elements.migrationActionMessage, actionError(error)); }
+});
+
+elements.mappingPreviewButton.addEventListener("click", () => {
+  const state = runtime.getState();
+  try {
+    mappingPreview = globalThis.HapichikeParentCloudActions.createMappingPreview(window.localStorage, {
+      localChildKey: selectedLocalChildKey, cloudChild: selectedChild(state), householdId: state.selectedHouseholdId, visibleChildren: state.cloudChildren.items,
+    });
+    elements.mappingPreviewMessage.textContent = mappingPreview.message;
+    elements.mappingApproval.checked = false;
+    elements.mappingApproval.disabled = false;
+    setActionMessage(elements.mappingActionMessage, "保存前にLocal / Cloud / Householdを目視確認してください。");
+  } catch (error) { mappingPreview = null; setActionMessage(elements.mappingActionMessage, actionError(error)); }
+  renderCloudManagement(state);
+});
+elements.mappingApproval.addEventListener("change", () => renderCloudManagement(runtime.getState()));
+elements.mappingSaveButton.addEventListener("click", async () => {
+  const state = runtime.getState();
+  try {
+    const refreshed = await verifyImportPreflight(state);
+    globalThis.HapichikeParentCloudActions.saveMapping(window.localStorage, mappingPreview, {
+      parentApproved: elements.mappingApproval.checked, cloudChild: refreshed.children.find(child => child.id === state.parentViewedSupabaseChildId), householdId: state.selectedHouseholdId, visibleChildren: refreshed.children,
+    });
+    mappingPreview = null;
+    setActionMessage(elements.mappingActionMessage, "mappingを保存しました。Cloudデータは変更していません。", true);
+    renderCloudManagement(state);
+  } catch (error) { setActionMessage(elements.mappingActionMessage, actionError(error)); }
+});
+
+elements.importPreviewButton.addEventListener("click", async () => {
+  const state = runtime.getState();
+  const model = globalThis.HapichikeParentCloudManagement.inspect(window.localStorage, state);
+  try {
+    if (!(model.mapping.status === "valid" && model.mapping.viewedChildMatches && model.mapping.item?.localChildKey === selectedLocalChildKey)) throw new Error("MAPPING_REQUIRED");
+    initialImportPreview = await globalThis.HapichikeParentCloudActions.createImportPreview(window.localStorage, {
+      localChildKey: selectedLocalChildKey, childId: state.parentViewedSupabaseChildId, readiness: model.initialImport.readiness, parentApproved: true,
+    });
+    elements.importPreviewResult.textContent = [`Local profile: ${selectedLocalChildKey}`, `Cloud Child: ${model.selectedChild.displayName}`, `absolute snapshot: ${JSON.stringify(initialImportPreview.balances)}`, `canonical hash: ${initialImportPreview.source_snapshot_hash}`, `backup date: ${initialImportPreview.backup_created_at}`, `import_id: ${initialImportPreview.import_id}`].join("\n");
+    elements.importApprovals.disabled = false;
+    elements.importApprovals.querySelectorAll("input").forEach(input => { input.checked = false; });
+    setActionMessage(elements.importActionMessage, "実行前に4項目を目視確認してください。");
+  } catch (error) { initialImportPreview = null; setActionMessage(elements.importActionMessage, actionError(error)); }
+  renderCloudManagement(state);
+});
+elements.importApprovals.addEventListener("change", () => renderCloudManagement(runtime.getState()));
+
+async function verifyImportPreflight(state) {
+  const { session } = await getParentSession();
+  if (!session?.user?.id) throw new Error("AUTH_REQUIRED");
+  const households = await getCurrentHouseholds(session.user.id);
+  const household = households.find(item => item.id === state.selectedHouseholdId);
+  if (!household || !["owner", "parent"].includes(household.membership_role)) throw new Error("AUTH_REQUIRED");
+  const children = (await getChildrenByHousehold(state.selectedHouseholdId)).map(child => ({
+    id: child.id, householdId: child.household_id, displayName: child.display_name ?? child.name ?? "",
+  }));
+  if (!children.some(child => child.id === state.parentViewedSupabaseChildId && child.householdId === state.selectedHouseholdId)) {
+    throw new Error("CHILD_LOAD_FAILED");
+  }
+  return { household, children };
+}
+
+elements.importExecuteButton.addEventListener("click", async () => {
+  if (importing) return;
+  importing = true;
+  renderCloudManagement(runtime.getState());
+  try {
+    await verifyImportPreflight(runtime.getState());
+    await runtime.refreshViewedChildData();
+    const state = runtime.getState();
+    const model = globalThis.HapichikeParentCloudManagement.inspect(window.localStorage, state);
+    const approvals = Object.fromEntries([...elements.importApprovals.querySelectorAll("input")].map(input => [input.dataset.importApproval, input.checked]));
+    if (!globalThis.HapichikeParentCloudActions.canExecuteImport({ readiness: model.initialImport.readiness, approvals, importing: false, preview: initialImportPreview, childId: state.parentViewedSupabaseChildId, mappingValid: model.mapping.status === "valid" && model.mapping.viewedChildMatches })) throw new Error(model.initialImport.readiness.cloudInitialized ? "CLOUD_INITIALIZED" : "IMPORT_NOT_ALLOWED");
+    await importInitialHapichikeSnapshot(initialImportPreview);
+    globalThis.HapichikeInitialImport.clearPendingPreview(window.localStorage);
+    initialImportPreview = null;
+    await runtime.refreshViewedChildData();
+    setActionMessage(elements.importActionMessage, "initial importが完了しました。再importはできません。", true);
+  } catch (error) {
+    if (!globalThis.HapichikeParentCloudActions.isRetryableNetworkError(error)) {
+      globalThis.HapichikeInitialImport.clearPendingPreview(window.localStorage);
+      initialImportPreview = null;
+    }
+    setActionMessage(elements.importActionMessage, actionError(error));
+  }
+  finally { importing = false; renderCloudManagement(runtime.getState()); }
+});
 
 if (!isSupabaseConfigured()) showOnly(elements.configView);
 else void runtime.initializeParentRuntime();

@@ -1540,6 +1540,37 @@
       font-weight: 900;
     }
 
+    .migration-diagnostic {
+      margin: 12px 0;
+      padding: 12px;
+      border: 1px dashed #9b86c8;
+      border-radius: 12px;
+      background: #faf8ff;
+    }
+
+    .migration-diagnostic summary { cursor: pointer; font-weight: 800; }
+
+    .migration-diagnostic-list {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .migration-diagnostic-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 7px 8px;
+      border-radius: 8px;
+      background: #fff;
+      font-size: 0.82rem;
+    }
+
+    .migration-diagnostic-row span:last-child { text-align: right; font-weight: 700; }
+    .migration-diagnostic-row[data-state="success"] span:last-child { color: #167647; }
+    .migration-diagnostic-row[data-state="empty"] span:last-child { color: #805f00; }
+    .migration-diagnostic-row[data-state="error"] span:last-child { color: #a12626; }
+
     .migration-approvals {
       display: grid;
       gap: 9px;
@@ -3133,12 +3164,12 @@
             端末データのバックアップ書き出し・確認・復元ができます。
           </button>
           <button class="parent-menu-button" type="button" id="openProfileMigrationBtn">
-            <strong>👤 子どもデータの移行</strong>
-            現在の端末データを、確認後に子ども別のローカルプロフィールへ移行します。
+            <strong>👤 子どもデータの移行（みまもりダッシュボード）</strong>
+            クラウド管理はみまもりダッシュボードで行います。
           </button>
           <button class="parent-menu-button" type="button" id="openCloudMappingBtn">
-            <strong>☁️ クラウド連携</strong>
-            local / cloud比較、子どもの対応付け、初回データ登録の準備を確認できます。
+            <strong>☁️ クラウド管理（みまもりダッシュボード）</strong>
+            Local / Cloud比較、mapping、初回登録はみまもりダッシュボードで行います。
           </button>
         </div>
         <div class="parent-save-row">
@@ -3214,6 +3245,21 @@
         <div class="migration-section">
           <p class="parent-note">この処理は端末内の旧データを新しいローカルプロフィールへ移すだけです。クラウド残高やCloud mappingは変更しません。</p>
           <div class="edit-error" id="migrationStatus" role="status"></div>
+          <details class="migration-diagnostic" id="migrationDiagnostic" open>
+            <summary>開発用 read-only diagnostic（一時表示）</summary>
+            <div class="migration-diagnostic-list" aria-live="polite">
+              <div class="migration-diagnostic-row" data-diagnostic="client"><span>1. Supabase client initialized</span><span>loading</span></div>
+              <div class="migration-diagnostic-row" data-diagnostic="session"><span>2. session</span><span>loading</span></div>
+              <div class="migration-diagnostic-row" data-diagnostic="user"><span>3. current user</span><span>loading</span></div>
+              <div class="migration-diagnostic-row" data-diagnostic="userId"><span>4. user id</span><span>loading</span></div>
+              <div class="migration-diagnostic-row" data-diagnostic="memberships"><span>5. household_members SELECT</span><span>loading</span></div>
+              <div class="migration-diagnostic-row" data-diagnostic="households"><span>6. households</span><span>loading</span></div>
+              <div class="migration-diagnostic-row" data-diagnostic="children"><span>7. children</span><span>loading</span></div>
+              <div class="migration-diagnostic-row" data-diagnostic="legacy"><span>8. legacy v1 read</span><span>loading</span></div>
+              <div class="migration-diagnostic-row" data-diagnostic="backup"><span>9. Phase 0 backup metadata read</span><span>loading</span></div>
+              <div class="migration-diagnostic-row" data-diagnostic="preview"><span>10. migration preview core</span><span>empty ・ Child未選択</span></div>
+            </div>
+          </details>
           <section aria-labelledby="migrationSourceTitle">
             <h4 id="migrationSourceTitle">現在の端末データ</h4>
             <div class="migration-summary-grid" id="migrationSourceSummary"><p class="parent-note">確認中です。</p></div>
@@ -6558,8 +6604,8 @@
     document.getElementById("openParentTicketGiftBtn").addEventListener("click", openParentTicketGift);
     document.getElementById("openParentEmailSettingsBtn").addEventListener("click", openParentEmailSettings);
     document.getElementById("openBackupRestoreBtn").addEventListener("click", openBackupRestore);
-    document.getElementById("openProfileMigrationBtn").addEventListener("click", openProfileMigration);
-    document.getElementById("openCloudMappingBtn").addEventListener("click", openCloudMapping);
+    document.getElementById("openProfileMigrationBtn").addEventListener("click", () => window.location.assign("/parent/"));
+    document.getElementById("openCloudMappingBtn").addEventListener("click", () => window.location.assign("/parent/"));
     document.getElementById("parentRewardBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentPayTransferBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentEmailBackBtn").addEventListener("click", openParentMenu);

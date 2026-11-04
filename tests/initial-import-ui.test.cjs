@@ -70,9 +70,10 @@ test("localStorage主残高keyへ書き込まず、許可されたmetadata helpe
   assert.match(index, /recordBackupMetadata/);
 });
 
-test("親ダッシュボードから既存のクラウド連携パネルへ辿れる", () => {
-  assert.match(parentIndex, /href="\/#parent-cloud"/);
-  assert.match(parentIndex, /Local \/ Cloud比較・初回登録状態を確認/);
+test("親ダッシュボード内にread-onlyクラウド管理がある", () => {
+  assert.match(parentIndex, /id="cloudManagement"/);
+  assert.match(parentIndex, /Local \/ Cloud 6残高比較/);
+  assert.doesNotMatch(parentIndex, /href="\/#parent-cloud"/);
   assert.match(index, /window\.location\.hash === "#parent-cloud"/);
   assert.match(index, /if \(openCloudMappingAfterParentUnlock\) openParentSettings\(\)/);
   assert.match(index, /openCloudMapping\(\)/);

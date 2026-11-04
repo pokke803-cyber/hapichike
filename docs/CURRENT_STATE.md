@@ -29,7 +29,7 @@
 
 ## 保存方式
 
-子ども側の実データはブラウザの localStorage のみです。アプリ状態は `kidsVegasCasino.v1`、親メールは `kidsVegasCasino.parentEmail.v1` に保存します。親用 `/parent` は Supabase だけを参照し、localStorage を読み書きしません。自動同期・移行は行いません。詳細は `STORAGE.md` と `SYNC_STRATEGY.md` を参照してください。
+子ども側の実データはブラウザの localStorage のみです。アプリ状態は `kidsVegasCasino.v1`、親メールは `kidsVegasCasino.parentEmail.v1` に保存します。親用 `/parent` は Supabase を閲覧し、同一originのLocal v1/v2、mapping、backup metadataをread-onlyで比較表示します。localStorage書込み、Cloud書込み、自動同期・移行は行いません。詳細は `STORAGE.md` と `SYNC_STRATEGY.md` を参照してください。
 
 ## Supabase基盤（親閲覧画面のみ接続）
 
@@ -39,7 +39,7 @@
 - 親だけがemail/passwordのSupabase Auth userとなり、子どもは`children`プロフィールとして扱う。
 - ハピチケ固有schemaの旧SQLはarchiveへ退避済みで、`hapichike_*`への再設計は未実施。
 - 現在の簡易親パスワード`1234`はlocalStorageに残る別機能で、Supabaseへ送信しない。
-- `/parent` は Supabase Auth と SELECT API だけを使う。更新系 API/RPC、自動sync、localStorageの参照／書込みは行わない。
+- `/parent` は Supabase Auth と SELECT API だけを使う。更新系 API/RPC、自動sync、localStorage書込みは行わない。Local参照はCloud管理の比較・preview用に限る。
 
 ## 現在の制約・未完成機能
 

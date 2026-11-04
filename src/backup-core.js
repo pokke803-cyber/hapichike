@@ -6,9 +6,11 @@
   "use strict";
 
   const FORMAT = "hapichike-backup";
-  const VERSION = 1;
+  const LEGACY_VERSION = 1;
+  const VERSION = 2;
   const APP = "hapichike";
   const STORAGE_KEY = "kidsVegasCasino.v1";
+  const V2_STORAGE_KEY = "kidsVegasCasino.v2";
   const EMAIL_KEY = "kidsVegasCasino.parentEmail.v1";
   const SAFETY_KEY = "kidsVegasCasino.restoreSafety.v1";
   const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
@@ -61,15 +63,36 @@
     return parsed;
   }
 
-  function makeEnvelope(mainState, parentEmail, createdAt = new Date().toISOString()) {
+  function parseV2Store(raw) {
+    if (typeof raw !== "string" || !raw.trim()) return null;
+    let parsed;
+    try { parsed = JSON.parse(raw); }
+    catch { throw new Error("端末のv2プロフィールが壊れているため、バックアップできません。"); }
+    assertSafeJson(parsed, V2_STORAGE_KEY);
+    if (!isPlainObject(parsed) || parsed.appId !== APP || parsed.version !== 2 || !isPlainObject(parsed.profiles)) {
+      throw new Error("端末のv2プロフィール形式が正しくありません。");
+    }
+    if (parsed.activeLocalChildKey !== null && typeof parsed.activeLocalChildKey !== "string") {
+      throw new Error("activeLocalChildKeyの型が不正です。");
+    }
+    if (!isPlainObject(parsed.householdShared)) throw new Error("householdSharedの型が不正です。");
+    if (parsed.activeLocalChildKey !== null && !Object.prototype.hasOwnProperty.call(parsed.profiles, parsed.activeLocalChildKey)) {
+      throw new Error("activeLocalChildKeyに対応するprofileがありません。");
+    }
+    return parsed;
+  }
+
+  function makeEnvelope(mainState, parentEmail, createdAt = new Date().toISOString(), v2Store = null) {
+    const hasV2 = v2Store !== null;
     const envelope = {
       format: FORMAT,
-      version: VERSION,
+      version: hasV2 ? VERSION : LEGACY_VERSION,
       createdAt,
       app: APP,
       data: {
         [STORAGE_KEY]: stripSecrets(mainState),
-        [EMAIL_KEY]: typeof parentEmail === "string" ? parentEmail : ""
+        [EMAIL_KEY]: typeof parentEmail === "string" ? parentEmail : "",
+        ...(hasV2 ? { [V2_STORAGE_KEY]: stripSecrets(v2Store) } : {}),
       }
     };
     validateEnvelope(envelope);
@@ -78,7 +101,8 @@
 
   function createBackup(storage, createdAt = new Date().toISOString()) {
     const mainState = parseMainState(storage.getItem(STORAGE_KEY));
-    return makeEnvelope(mainState, storage.getItem(EMAIL_KEY) || "", createdAt);
+    const v2Store = parseV2Store(storage.getItem(V2_STORAGE_KEY));
+    return makeEnvelope(mainState, storage.getItem(EMAIL_KEY) || "", createdAt, v2Store);
   }
 
   function parseBackup(text) {
@@ -100,7 +124,7 @@
     if (!isPlainObject(envelope)) throw new Error("バックアップ全体の型が不正です。");
     if (envelope.format !== FORMAT) throw new Error("HAPICHIKEのバックアップ形式ではありません。");
     if (!Object.prototype.hasOwnProperty.call(envelope, "version")) throw new Error("versionのない旧形式は復元できません。");
-    if (envelope.version !== VERSION) throw new Error(`未対応のbackup versionです（対応: ${VERSION}）。`);
+    if (![LEGACY_VERSION, VERSION].includes(envelope.version)) throw new Error(`未対応のbackup versionです（対応: ${LEGACY_VERSION}, ${VERSION}）。`);
     if (envelope.app !== APP) throw new Error("対象アプリが一致しません。");
     if (typeof envelope.createdAt !== "string" || !Number.isFinite(Date.parse(envelope.createdAt))) throw new Error("backup日時が不正です。");
     if (!isPlainObject(envelope.data)) throw new Error("dataがありません。");
@@ -138,6 +162,12 @@
       ["bgmVolume", "sfxVolume"].forEach(key => requireFiniteNumber(main.audioSettings[key], `audioSettings.${key}`));
     }
     if (typeof envelope.data[EMAIL_KEY] !== "string") throw new Error(`${EMAIL_KEY} は文字列である必要があります。`);
+    if (envelope.version === VERSION) {
+      if (!Object.prototype.hasOwnProperty.call(envelope.data, V2_STORAGE_KEY)) throw new Error(`${V2_STORAGE_KEY} がありません。`);
+      const v2 = envelope.data[V2_STORAGE_KEY];
+      if (containsSecretKey(v2)) throw new Error("認証情報を含むv2バックアップは復元できません。");
+      parseV2Store(JSON.stringify(v2));
+    }
     return envelope;
   }
 
@@ -152,10 +182,14 @@
     const backup = envelope.data[STORAGE_KEY];
     const current = isPlainObject(currentState) ? currentState : {};
     const countHistory = value => Array.isArray(value?.history) ? value.history.length : 0;
+    const v2 = envelope.version === VERSION ? envelope.data[V2_STORAGE_KEY] : null;
     return {
       createdAt: envelope.createdAt,
       version: envelope.version,
       childName: backup.childName || "未設定",
+      profileCount: v2 ? Object.keys(v2.profiles).length : 0,
+      activeLocalChildKey: v2?.activeLocalChildKey ?? null,
+      householdShared: v2?.householdShared ?? null,
       rows: [
         ["tickets", current.coins, backup.coins],
         ["starCoins", current.starCoins, backup.starCoins],
@@ -175,25 +209,31 @@
     const oldMainRaw = storage.getItem(STORAGE_KEY);
     const oldEmailRaw = storage.getItem(EMAIL_KEY);
     const oldSafetyRaw = storage.getItem(SAFETY_KEY);
+    const oldV2Raw = storage.getItem(V2_STORAGE_KEY);
     const oldMain = parseMainState(oldMainRaw);
-    const safetyEnvelope = makeEnvelope(oldMain, oldEmailRaw || "", createdAt);
+    const oldV2 = parseV2Store(oldV2Raw);
+    const safetyEnvelope = makeEnvelope(oldMain, oldEmailRaw || "", createdAt, oldV2);
     const restoredMain = stripSecrets(envelope.data[STORAGE_KEY]);
     if (typeof oldMain.parentPassword === "string") restoredMain.parentPassword = oldMain.parentPassword;
     const nextMainRaw = JSON.stringify(restoredMain);
     const nextEmailRaw = envelope.data[EMAIL_KEY];
     const nextSafetyRaw = JSON.stringify(safetyEnvelope);
+    const nextV2Raw = envelope.version === VERSION ? JSON.stringify(stripSecrets(envelope.data[V2_STORAGE_KEY])) : oldV2Raw;
 
     try {
       storage.setItem(SAFETY_KEY, nextSafetyRaw);
       storage.setItem(STORAGE_KEY, nextMainRaw);
       storage.setItem(EMAIL_KEY, nextEmailRaw);
-      if (storage.getItem(STORAGE_KEY) !== nextMainRaw || storage.getItem(EMAIL_KEY) !== nextEmailRaw) throw new Error("復元後の読み戻し確認に失敗しました。");
+      if (envelope.version === VERSION) storage.setItem(V2_STORAGE_KEY, nextV2Raw);
+      if (storage.getItem(STORAGE_KEY) !== nextMainRaw || storage.getItem(EMAIL_KEY) !== nextEmailRaw
+        || (envelope.version === VERSION && storage.getItem(V2_STORAGE_KEY) !== nextV2Raw)) throw new Error("復元後の読み戻し確認に失敗しました。");
       return { safetyKey: SAFETY_KEY };
     } catch (error) {
       try {
         restoreRaw(storage, STORAGE_KEY, oldMainRaw);
         restoreRaw(storage, EMAIL_KEY, oldEmailRaw);
         restoreRaw(storage, SAFETY_KEY, oldSafetyRaw);
+        restoreRaw(storage, V2_STORAGE_KEY, oldV2Raw);
       } catch (rollbackError) {
         throw new Error(`復元と自動ロールバックに失敗しました: ${error.message}`);
       }
@@ -211,5 +251,5 @@
     return `hapichike-backup-${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}-${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}.json`;
   }
 
-  return { FORMAT, VERSION, APP, STORAGE_KEY, EMAIL_KEY, SAFETY_KEY, parseMainState, createBackup, parseBackup, validateEnvelope, preview, restore, filename, stripSecrets };
+  return { FORMAT, LEGACY_VERSION, VERSION, APP, STORAGE_KEY, V2_STORAGE_KEY, EMAIL_KEY, SAFETY_KEY, parseMainState, parseV2Store, createBackup, parseBackup, validateEnvelope, preview, restore, filename, stripSecrets };
 });

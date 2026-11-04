@@ -208,12 +208,13 @@
       const generation = ++detailGeneration;
       update(core.startViewedChildDataLoad(state));
       try {
-        const [balance, logs] = await withTimeout(Promise.all([
+        const [balance, logs, syncState] = await withTimeout(Promise.all([
           rewardsApi.getChildBalances(childId),
           historyApi.getRecentRewardLogs(childId, 20),
+          typeof rewardsApi.getChildAppSyncState === "function" ? rewardsApi.getChildAppSyncState(childId) : Promise.resolve(null),
         ]));
         if (generation !== detailGeneration || childId !== state.parentViewedSupabaseChildId) return snapshot();
-        update(core.applyViewedChildData(state, childId, balance, logs ?? []));
+        update(core.applyViewedChildData(state, childId, balance, logs ?? [], syncState));
       } catch {
         if (generation !== detailGeneration || childId !== state.parentViewedSupabaseChildId) return snapshot();
         update(core.applyViewedChildDataError(state));

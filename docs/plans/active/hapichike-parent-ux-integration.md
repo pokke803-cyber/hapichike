@@ -4,6 +4,42 @@
 状態: P1 Parent runtime read-only統合完了。Phase 2.5D migration実行停止中
 変更境界: `/parent` read-only adapter/UIのみ。localStorage write、Supabase write、migration実行、production deployを行わない
 
+# P2 Read-only Cloud Management
+
+`/parent` のChild切替の下に「クラウド管理」を追加し、`parentViewedSupabaseChildId` をCloud Child選択の唯一の正本とする。P2は表示とpreviewのみで、SupabaseはSELECT、localStorageは `getItem` のみ。mapping保存、initial import、migration apply、backup作成・restore、v2 activationは接続しない。
+
+# Local / Cloud Comparison
+
+Local v1/v2の有無・invalid、v2 profile数、active key存在を表示する。mappingが表示中Childに明示的に対応する場合だけ6残高を比較する。legacy ownerが不明な場合は名前一致で推測せず「比較対象のLocal profileが未確定」とする。差分はLocal - Cloudで表示し、自動修正しない。
+
+# Mapping Status
+
+`kidsVegasCasino.cloudMapping.v1` をread-onlyでparseし、localChildKey、Supabase Child、household一致、visible Child存在によりmissing / invalid / stale / validを表示する。表示中Childとmappingの一致・不一致を明記し、自動切替しない。
+
+# Initial Import Status
+
+`child_app_sync_state`、6残高、reward logsを既存006 ruleで評価する。sync state、`initial_import_completed_at`、import version、Cloud initialized、eligible / not eligibleを表示し、実行ボタンは置かない。
+
+# Migration Preview
+
+明示ボタン操作でのみ既存 `previewLegacyMigration()` を呼び、source childName、target Cloud Child、新規UUID予定、6残高、task/history件数、progress、reset、householdShared、legacyExtras、secret除外、conflictを表示する。apply経路はimportしない。
+
+# Backup Status
+
+Phase 0の `kidsVegasCasino.initialImportBackup.v1` metadataをread-onlyで読み、backupの有無と現在の6残高snapshotとの一致 / outdatedを表示する。作成・restore操作はP2対象外。
+
+# Diagnostics
+
+Auth、Household、Child list/details、Local v1/v2、Mapping、Sync stateの安定statusだけを表示する。token、session、debug全文、技術例外は表示しない。
+
+# Staging Acceptance
+
+localで `npm test`、`npm run build`、`git diff --check` がPASSした後にcanonical stagingでParent AのChild A/C切替とParent BのChild B限定表示を確認する。P2実装作業ではdeployせず、production操作は禁止。
+
+# P3 Prerequisites
+
+P3へ進む前に、stagingで家庭分離、Child切替、mapping stale/mismatch、Cloud initialized、Local invalidでもCloud dashboard継続、write 0を再確認する。P2はP3のwrite権限や同期開始を許可しない。
+
 ## Decision summary
 
 Parent Authを必要とするCloud管理は `/parent` の単一Parent runtimeへ集約する。子ども側の「おうちの人用」には、現在の端末で完結する日常的なローカル設定だけを残す。localStorageを扱うbackup、restore、legacy migrationも、認証済みの親がCloud Childを確認しながら行う管理操作として `/parent` へ移す。ただし処理本体は既存coreを再利用し、UI移設のためにロジックを書き直さない。

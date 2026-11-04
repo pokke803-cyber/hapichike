@@ -103,9 +103,41 @@ test("format不正、versionなし、future version、必須key欠損を拒否",
   assert.throws(() => backup.validateEnvelope({ ...valid, format: "other" }), /形式/);
   const noVersion = { ...valid }; delete noVersion.version;
   assert.throws(() => backup.validateEnvelope(noVersion), /versionのない旧形式/);
-  assert.throws(() => backup.validateEnvelope({ ...valid, version: 2 }), /未対応/);
+  assert.throws(() => backup.validateEnvelope({ ...valid, version: 3 }), /未対応/);
   const noMain = { ...valid, data: { [backup.EMAIL_KEY]: "" } };
   assert.throws(() => backup.validateEnvelope(noMain), /kidsVegasCasino.v1/);
+});
+
+test("v2 backupは複数profile・activeLocalChildKey・householdSharedを含み秘密情報を除外する", () => {
+  const storage = storageFor();
+  const v2 = {
+    appId: "hapichike", version: 2, activeLocalChildKey: "local-a",
+    profiles: {
+      "local-a": { localChildKey: "local-a", childName: "A", nested: { accessToken: "secret", safe: true } },
+      "local-c": { localChildKey: "local-c", childName: "C" },
+    },
+    householdShared: { parentSettings: { password: "secret", theme: "light" } },
+  };
+  storage.setItem(backup.V2_STORAGE_KEY, JSON.stringify(v2));
+  const envelope = backup.createBackup(storage, "2026-11-04T00:00:00.000Z");
+  assert.equal(envelope.version, 2);
+  assert.deepEqual(Object.keys(envelope.data[backup.V2_STORAGE_KEY].profiles).sort(), ["local-a", "local-c"]);
+  assert.equal(envelope.data[backup.V2_STORAGE_KEY].activeLocalChildKey, "local-a");
+  assert.equal(envelope.data[backup.V2_STORAGE_KEY].householdShared.parentSettings.theme, "light");
+  assert.doesNotMatch(JSON.stringify(envelope), /secret|accessToken|password/);
+  assert.equal(backup.preview(envelope, sampleState()).profileCount, 2);
+});
+
+test("v2 restoreはv1互換を維持しv2 readback失敗時に両方rollbackする", () => {
+  const source = storageFor(sampleState({ coins: 7 }));
+  source.setItem(backup.V2_STORAGE_KEY, JSON.stringify({
+    appId: "hapichike", version: 2, activeLocalChildKey: null, profiles: {}, householdShared: {},
+  }));
+  const envelope = backup.createBackup(source);
+  const target = storageFor(sampleState({ coins: 1 }));
+  backup.restore(target, envelope);
+  assert.equal(JSON.parse(target.getItem(backup.STORAGE_KEY)).coins, 7);
+  assert.equal(JSON.parse(target.getItem(backup.V2_STORAGE_KEY)).version, 2);
 });
 
 test("不正型、Infinity、prototype pollutionを拒否", () => {
