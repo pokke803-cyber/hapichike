@@ -21,7 +21,7 @@ if (hasSupabaseConfig) {
 export const supabase = initializedClient;
 
 export function isSupabaseConfigured() {
-  return hasSupabaseConfig;
+  return Boolean(supabase);
 }
 
 export function getSupabaseRuntimeDiagnostics() {
