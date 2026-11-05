@@ -1,5 +1,6 @@
 (function (root, factory) {
-  const core = typeof module === "object" && module.exports
+  const commonJs = typeof module === "object" && module.exports && typeof require === "function";
+  const core = commonJs
     ? require("./child-identity-core.js")
     : root.HapichikeChildIdentity;
   const api = factory(core);

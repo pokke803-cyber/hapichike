@@ -19,6 +19,13 @@ test("broken v2 selectorは空にせず安全エラーを表示する", () => {
   assert.match(html, /localStateMode = "blocked";[\s\S]*select\.disabled = true;[\s\S]*データ確認が必要です/);
 });
 
+test("v1 missingはempty/new stateとしてmainと親設定を維持する", () => {
+  assert.match(html, /NEW_OR_EMPTY_LEGACY_STATE/);
+  assert.match(html, /localStateMode === "empty"[\s\S]*データなし/);
+  assert.match(html, /loaded\.mode === "empty" \? emptyFallback\(\)/);
+  assert.match(fs.readFileSync(path.join(__dirname, "..\/src\/local-state-adapter.js"), "utf8"), /EMPTY_LEGACY_READ_ONLY/);
+});
+
 test("LEGACY_MODEのpage loadは自動resetを永続化せずlocalStorage write 0にする", () => {
   assert.match(html, /applyAutomaticDailyReset\(false, false\)/);
   assert.match(html, /function applyAutomaticDailyReset\(notify = false, persist = true\)[\s\S]*if \(persist\) saveState\(\)/);
@@ -46,6 +53,13 @@ test("main entryはlocal state依存moduleを明示順で先にimportする", ()
   assert.equal((html.match(/src="\/src\//g) || []).length, 0);
 });
 
+test("mainのUMD依存moduleはbrowser bundleでrequire分岐に入らない", () => {
+  for (const file of ["local-state-adapter.js", "profile-domain.js", "profile-migration.js"]) {
+    const source = fs.readFileSync(path.join(__dirname, "..", "src", file), "utf8");
+    assert.match(source, /module\.exports && typeof require === "function"/);
+  }
+});
+
 test("staging boot diagnosticは指定状態だけを表示する", () => {
   assert.match(html, /location\.hostname === "hapichike-staging\.vercel\.app"/);
   for (const label of ["script", "legacy read", "mode", "child render", "parent handler", "main render"]) {
@@ -55,6 +69,16 @@ test("staging boot diagnosticは指定状態だけを表示する", () => {
   assert.match(html, /PROFILE_INIT_ERROR/);
   assert.match(html, /UI_BIND_ERROR/);
   assert.doesNotMatch(html, /stack:\s*\$\{/);
+});
+
+test("staging boot diagnosticはorigin・storage availability・対象keyの存在だけを表示する", () => {
+  for (const text of [
+    "location.origin", "storage availability", "kidsVegasCasino.v1", "kidsVegasCasino.v2",
+    "kidsVegasCasino.initialImportBackup.v1", "kidsVegasCasino.identityMigrationSafety.v1",
+    "kidsVegasCasino.restoreSafety.v1", "kidsVegasCasino.cloudMapping.v1",
+    "kidsVegasCasino.cloudMapping.v2", "kidsVegasCasino.v2.activation"
+  ]) assert.ok(html.includes(text), `${text} should be present`);
+  assert.match(html, /localStorage\.getItem\(key\) === null \? "MISSING" : "PRESENT"/);
 });
 
 test("window errorとunhandledrejectionはsafe codeへ変換する", () => {

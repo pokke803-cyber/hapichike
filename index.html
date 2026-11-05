@@ -3460,7 +3460,17 @@
         childRender: "ERROR",
         parentHandler: "ERROR",
         mainRender: "ERROR",
-        code: "BOOT_ERROR"
+        code: "BOOT_ERROR",
+        origin: location.origin,
+        storageAvailability: "UNAVAILABLE",
+        v1: "MISSING",
+        v2: "MISSING",
+        backup: "MISSING",
+        migrationSafety: "MISSING",
+        restoreSafety: "MISSING",
+        mappingV1: "MISSING",
+        mappingV2: "MISSING",
+        activation: "MISSING"
       };
       let panel = null;
       const render = () => {
@@ -3480,7 +3490,18 @@
           `child render: ${values.childRender}`,
           `parent handler: ${values.parentHandler}`,
           `main render: ${values.mainRender}`,
-          `code: ${values.code}`
+          `code: ${values.code}`,
+          `origin: ${values.origin}`,
+          `storage availability: ${values.storageAvailability}`,
+          "storage:",
+          `v1: ${values.v1}`,
+          `v2: ${values.v2}`,
+          `backup: ${values.backup}`,
+          `migrationSafety: ${values.migrationSafety}`,
+          `restoreSafety: ${values.restoreSafety}`,
+          `mappingV1: ${values.mappingV1}`,
+          `mappingV2: ${values.mappingV2}`,
+          `activation: ${values.activation}`
         ].join("\n");
       };
       const set = (key, value) => {
@@ -3491,6 +3512,25 @@
       window.HapichikeBootDiagnostic = Object.freeze({ set, safeCode });
       window.addEventListener("error", () => safeCode("BOOT_ERROR"));
       window.addEventListener("unhandledrejection", () => safeCode("BOOT_ERROR"));
+
+      try {
+        const presenceKeys = {
+          v1: "kidsVegasCasino.v1",
+          v2: "kidsVegasCasino.v2",
+          backup: "kidsVegasCasino.initialImportBackup.v1",
+          migrationSafety: "kidsVegasCasino.identityMigrationSafety.v1",
+          restoreSafety: "kidsVegasCasino.restoreSafety.v1",
+          mappingV1: "kidsVegasCasino.cloudMapping.v1",
+          mappingV2: "kidsVegasCasino.cloudMapping.v2",
+          activation: "kidsVegasCasino.v2.activation"
+        };
+        set("storageAvailability", "AVAILABLE");
+        Object.entries(presenceKeys).forEach(([label, key]) => {
+          set(label, localStorage.getItem(key) === null ? "MISSING" : "PRESENT");
+        });
+      } catch {
+        set("storageAvailability", "UNAVAILABLE");
+      }
 
       try {
         const button = document.getElementById("openParentSettingsBtn");
@@ -3722,6 +3762,7 @@
 
     function loadState() {
       const fallback = () => normalizeState({ childName: "", coins: 0, tasks: defaultTasks, history: [], payLogs: [], taskHistory: [], parentPassword: "1234", badges: [] });
+      const emptyFallback = () => normalizeState({ childName: "", coins: 0, tasks: [], history: [], payLogs: [], taskHistory: [], parentPassword: "1234", badges: [] });
       try {
         const legacyRaw = localStorage.getItem(storageKey);
         if (legacyRaw === null) {
@@ -3733,12 +3774,11 @@
         const loaded = window.HapichikeLocalState.load(localStorage, fallback);
         localStateMode = loaded.mode;
         localStateBlockedError = null;
-        bootDiagnostic?.set("mode", loaded.mode === "v2" ? "V2" : "LEGACY");
-        return normalizeState(loaded.state || fallback());
+        bootDiagnostic?.set("mode", loaded.mode === "v2" ? "V2" : loaded.mode === "empty" ? "NEW_OR_EMPTY_LEGACY_STATE" : "LEGACY");
+        return normalizeState(loaded.mode === "empty" ? emptyFallback() : (loaded.state || fallback()));
       } catch (error) {
         localStateMode = "blocked";
         localStateBlockedError = error;
-        bootDiagnostic?.set("legacyRead", "INVALID");
         bootDiagnostic?.set("mode", "BROKEN");
         bootDiagnostic?.safeCode("PROFILE_INIT_ERROR");
         return fallback();
@@ -3987,6 +4027,13 @@
         label.classList.toggle("hidden", !legacyName);
         select.disabled = true;
         select.replaceChildren(...(legacyName ? [makeOption("legacy-single-profile", legacyName)] : []));
+        return;
+      }
+
+      if (localStateMode === "empty") {
+        label.classList.remove("hidden");
+        select.disabled = true;
+        select.replaceChildren(makeOption("", "データなし"));
         return;
       }
 

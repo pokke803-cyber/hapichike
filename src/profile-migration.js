@@ -1,11 +1,12 @@
 (function (root, factory) {
-  const core = typeof module === "object" && module.exports
+  const commonJs = typeof module === "object" && module.exports && typeof require === "function";
+  const core = commonJs
     ? require("./child-identity-core.js")
     : root.HapichikeChildIdentity;
-  const domain = typeof module === "object" && module.exports
+  const domain = commonJs
     ? require("./profile-domain.js")
     : root.HapichikeProfileDomain;
-  const backup = typeof module === "object" && module.exports
+  const backup = commonJs
     ? require("./backup-core.js")
     : root.HapichikeBackup;
   const api = factory(core, domain, backup);

@@ -1,8 +1,9 @@
 (function (root, factory) {
-  const core = typeof module === "object" && module.exports
+  const commonJs = typeof module === "object" && module.exports && typeof require === "function";
+  const core = commonJs
     ? require("./child-identity-core.js")
     : root.HapichikeChildIdentity;
-  const mapping = typeof module === "object" && module.exports
+  const mapping = commonJs
     ? require("./cloud-mapping-core.js")
     : root.HapichikeCloudMapping;
   const api = factory(core, mapping);
@@ -79,13 +80,14 @@
 
   function load(storage, fallbackFactory) {
     const markerActive = hasActivationMarker(storage);
+    const legacyMissing = storage.getItem(V1_KEY) === null;
     let store;
     try { store = readV2(storage); }
     catch (error) {
       if (markerActive) throw new Error(`V2_FAIL_CLOSED: ${error.message}`);
-      return { mode: "legacy", state: readLegacy(storage, fallbackFactory), store: null };
+      return { mode: legacyMissing ? "empty" : "legacy", state: readLegacy(storage, fallbackFactory), store: null };
     }
-    if (!markerActive) return { mode: "legacy", state: readLegacy(storage, fallbackFactory), store };
+    if (!markerActive) return { mode: legacyMissing ? "empty" : "legacy", state: readLegacy(storage, fallbackFactory), store };
     if (!store) throw new Error("V2_FAIL_CLOSED: activated store is missing");
     const profile = requireActiveProfile(store);
     const legacy = readLegacy(storage, () => ({})) || {};
@@ -150,6 +152,7 @@
 
   function save(storage, runtimeState, now) {
     const loaded = load(storage, () => runtimeState);
+    if (loaded.mode === "empty") throw new Error("EMPTY_LEGACY_READ_ONLY");
     if (loaded.mode === "legacy") {
       storage.setItem(V1_KEY, JSON.stringify(runtimeState));
       return { mode: "legacy", state: runtimeState };

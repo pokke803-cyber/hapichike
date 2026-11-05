@@ -123,6 +123,23 @@ test("profiles 0件の未activation v2があってもlegacy modeを維持する"
   assert.deepEqual(adapter.listProfiles(storage), []);
 });
 
+test("v1 missing + v2未activationはempty modeで起動し、read/saveで新規v1を作らない", () => {
+  const storage = new MemoryStorage();
+  const before = new Map(storage.values);
+  const loaded = adapter.load(storage, () => ({ childName: "", coins: 0, tasks: [] }));
+  assert.equal(loaded.mode, "empty");
+  assert.deepEqual(storage.values, before);
+  assert.throws(() => adapter.save(storage, loaded.state), /EMPTY_LEGACY_READ_ONLY/);
+  assert.equal(storage.getItem(adapter.V1_KEY), null);
+});
+
+test("v1 missing + validな未activation v2もempty modeのままwrite 0", () => {
+  const storage = new MemoryStorage({ [adapter.V2_KEY]: JSON.stringify(identity.createEmptyStore(NOW)) });
+  const before = new Map(storage.values);
+  assert.equal(adapter.load(storage, () => ({ tasks: [] })).mode, "empty");
+  assert.deepEqual(storage.values, before);
+});
+
 test("migration metadataやstore内activationだけではv2をactivationしない", () => {
   const storage = setup();
   storage.removeItem(adapter.ACTIVATION_KEY);
