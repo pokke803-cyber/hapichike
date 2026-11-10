@@ -82,8 +82,8 @@ elements.passwordForm.addEventListener("submit", async (event) => {
   }
 });
 
-elements.goToLoginButton.addEventListener("click", () => { window.location.href = "/parent"; });
-elements.goToParentButton.addEventListener("click", () => { window.location.href = "/parent"; });
+elements.goToLoginButton.addEventListener("click", () => { window.location.href = "/parent/"; });
+elements.goToParentButton.addEventListener("click", () => { window.location.href = "/parent/"; });
 
 async function init() {
   if (!isSupabaseConfigured() || !isStagingProject()) {

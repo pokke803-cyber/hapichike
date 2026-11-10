@@ -5,15 +5,16 @@
     commonJs ? require("../cloud-mapping-core.js") : root.HapichikeCloudMapping,
     commonJs ? require("../child-identity-core.js") : root.HapichikeChildIdentity,
     commonJs ? require("../profile-domain.js") : root.HapichikeProfileDomain,
+    commonJs ? require("../profile-repository.js") : root.HapichikeProfileRepository,
     commonJs ? require("../profile-migration.js") : root.HapichikeProfileMigration,
     commonJs ? require("../initial-import-core.js") : root.HapichikeInitialImport,
   );
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.HapichikeParentCloudActions = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function (backup, mapping, identity, domain, migration, importCore) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (backup, mapping, identity, domain, repository, migration, importCore) {
   "use strict";
 
-  if (![backup, mapping, identity, domain, migration, importCore].every(Boolean)) throw new Error("Parent Cloud action dependencies are required");
+  if (![backup, mapping, identity, domain, repository, migration, importCore].every(Boolean)) throw new Error("Parent Cloud action dependencies are required");
 
   function toCloudBalances(balances) {
     return {
@@ -28,6 +29,7 @@
 
   function readLocalProfiles(storage) {
     const profiles = [];
+    const v2Active = storage.getItem(backup.V2_ACTIVATION_KEY) === "active";
     const legacyRaw = storage.getItem(mapping.MAIN_STORAGE_KEY);
     if (legacyRaw) {
       const legacy = mapping.parseLocalState(legacyRaw);
@@ -35,13 +37,19 @@
     }
     const v2Raw = storage.getItem("kidsVegasCasino.v2");
     if (v2Raw) {
-      const store = identity.parseStore(v2Raw);
+      let store;
+      try { store = identity.parseStore(v2Raw); }
+      catch (error) {
+        if (v2Active) throw error;
+        return profiles;
+      }
       Object.values(store.profiles).forEach(profile => profiles.push({
         localChildKey: profile.localChildKey,
         displayName: profile.childName || "名前未設定",
         kind: "v2",
         balances: toCloudBalances(domain.getBalances(profile)),
         active: profile.localChildKey === store.activeLocalChildKey,
+        pendingCloudIdentity: profile.pendingCloudIdentity ? { ...profile.pendingCloudIdentity } : null,
       }));
     }
     return profiles;
@@ -53,9 +61,101 @@
     return profile;
   }
 
-  function createBackup(storage, localChildKey, createdAt = new Date().toISOString()) {
+  function requireCloudTarget(input) {
+    const cloudChild = input?.cloudChild;
+    const householdId = input?.householdId;
+    if (!cloudChild?.id || !householdId || cloudChild.householdId !== householdId
+      || !(input.visibleChildren ?? []).some(child => child.id === cloudChild.id && child.householdId === householdId)) {
+      throw new Error("CHILD_LOAD_FAILED");
+    }
+    return cloudChild;
+  }
+
+  function requireActivatedStore(storage) {
+    if (storage.getItem(backup.V2_ACTIVATION_KEY) !== "active") throw new Error("V2_NOT_ACTIVATED");
+    let store;
+    try { store = identity.parseStore(storage.getItem(identity.STORAGE_KEY)); }
+    catch { throw new Error("LOCAL_INVALID"); }
+    if (!store?.activeLocalChildKey || !store.profiles[store.activeLocalChildKey]) throw new Error("LOCAL_INVALID");
+    return store;
+  }
+
+  function assertCloudProfileAvailable(storage, store, cloudChild, householdId) {
+    const pendingConflict = Object.values(store.profiles).find(profile => profile.pendingCloudIdentity?.supabaseChildId === cloudChild.id);
+    let mappingDocument;
+    try { mappingDocument = mapping.parseV2MappingDocument(storage.getItem(mapping.MAPPING_V2_STORAGE_KEY)); }
+    catch { throw new Error("MAPPING_CONFLICT"); }
+    const mappedConflict = mappingDocument.mappings.find(item => item.supabaseChildId === cloudChild.id);
+    if (pendingConflict || mappedConflict) throw new Error("LOCAL_PROFILE_DUPLICATE");
+    if (mappingDocument.mappings.some(item => item.householdId !== householdId && item.supabaseChildId === cloudChild.id)) {
+      throw new Error("MAPPING_CONFLICT");
+    }
+  }
+
+  function previewLocalProfileCreation(storage, input) {
+    const cloudChild = requireCloudTarget(input);
+    const store = requireActivatedStore(storage);
+    assertCloudProfileAvailable(storage, store, cloudChild, input.householdId);
+    return {
+      cloudChildId: cloudChild.id,
+      childName: cloudChild.displayName || "名前未設定",
+      householdId: input.householdId,
+      sourceStoreRaw: storage.getItem(identity.STORAGE_KEY),
+      activeLocalChildKey: store.activeLocalChildKey,
+      balances: { tickets: 0, starCoins: 0, sweetsPay: 0, toyPay: 0, gamePay: 0, happyChanceCards: 0 },
+      taskAssignments: 0,
+      historyEntries: 0,
+      progress: "default",
+      resetState: "default",
+      cloudWrite: false,
+    };
+  }
+
+  function createLocalProfile(storage, preview, input, options = {}) {
+    if (input?.parentApproved !== true) throw new Error("PROFILE_CREATION_CONFLICT");
+    const cloudChild = requireCloudTarget(input);
+    const store = requireActivatedStore(storage);
+    if (!preview || preview.cloudChildId !== cloudChild.id || preview.householdId !== input.householdId
+      || preview.childName !== (cloudChild.displayName || "名前未設定")
+      || preview.sourceStoreRaw !== storage.getItem(identity.STORAGE_KEY)) {
+      throw new Error("PROFILE_CREATION_CONFLICT");
+    }
+    assertCloudProfileAvailable(storage, store, cloudChild, input.householdId);
+    const now = options.now || (() => new Date());
+    const preparedAt = now().toISOString();
+    const repo = repository.createRepository(storage, { now: () => new Date(preparedAt), cryptoApi: options.cryptoApi });
+    const profile = repo.createProfile({
+      childName: preview.childName,
+      pendingCloudIdentity: { supabaseChildId: cloudChild.id, householdId: input.householdId, preparedAt },
+    });
+    const after = requireActivatedStore(storage);
+    if (after.activeLocalChildKey !== store.activeLocalChildKey) throw new Error("PROFILE_CREATION_CONFLICT");
+    return { profile, activeLocalChildKey: after.activeLocalChildKey };
+  }
+
+  function compareProfileToCloud(storage, localChildKey, cloudBalance) {
     const profile = requireProfile(storage, localChildKey);
-    const envelope = backup.createBackup(storage, createdAt);
+    return mapping.compareBalances({ balances: profile.balances }, cloudBalance);
+  }
+
+  function resolveBackupSource(storage) {
+    if (storage.getItem(backup.V2_ACTIVATION_KEY) !== "active") {
+      return requireProfile(storage, mapping.LOCAL_CHILD_KEY);
+    }
+    let store;
+    try { store = identity.parseStore(storage.getItem(identity.STORAGE_KEY)); }
+    catch { throw new Error("LOCAL_INVALID"); }
+    const activeKey = store?.activeLocalChildKey;
+    if (!activeKey || !store.profiles[activeKey]) throw new Error("LOCAL_INVALID");
+    const profile = readLocalProfiles(storage).find(item => item.kind === "v2" && item.localChildKey === activeKey);
+    if (!profile) throw new Error("LOCAL_INVALID");
+    return profile;
+  }
+
+  function createBackup(storage, localChildKey, createdAt = new Date().toISOString()) {
+    const profile = resolveBackupSource(storage);
+    const mode = profile.kind === "v2" ? "v2" : "legacy";
+    const envelope = backup.createBackup(storage, createdAt, { mode });
     const metadata = importCore.recordBackupMetadata(storage, envelope.createdAt, profile.balances);
     return { envelope, metadata, profile };
   }
@@ -82,6 +182,11 @@
 
   function createMappingPreview(storage, input) {
     const profile = requireProfile(storage, input.localChildKey);
+    if (profile.pendingCloudIdentity
+      && (profile.pendingCloudIdentity.supabaseChildId !== input.cloudChild?.id
+        || profile.pendingCloudIdentity.householdId !== input.householdId)) {
+      throw new Error("MAPPING_CONFLICT");
+    }
     return mapping.createV2MappingPreview({
       localProfile: { localChildKey: profile.localChildKey, displayName: profile.displayName },
       cloudChild: input.cloudChild,
@@ -93,6 +198,11 @@
 
   function saveMapping(storage, preview, input, confirmedAt) {
     const profile = requireProfile(storage, preview?.localChildKey);
+    if (profile.pendingCloudIdentity
+      && (profile.pendingCloudIdentity.supabaseChildId !== input.cloudChild?.id
+        || profile.pendingCloudIdentity.householdId !== input.householdId)) {
+      throw new Error("MAPPING_CONFLICT");
+    }
     return mapping.saveVerifiedV2Mapping(storage, preview, {
       parentApproved: input.parentApproved,
       localProfile: { localChildKey: profile.localChildKey, displayName: profile.displayName },
@@ -131,7 +241,7 @@
 
   function safeError(error) {
     const message = String(error?.message || error || "").toUpperCase();
-    const codes = ["AUTH_REQUIRED", "HOUSEHOLD_LOAD_FAILED", "CHILD_LOAD_FAILED", "LOCAL_INVALID", "BACKUP_REQUIRED", "MAPPING_REQUIRED", "MAPPING_CONFLICT", "CLOUD_INITIALIZED", "IMPORT_NOT_ALLOWED", "MIGRATION_CONFLICT", "NETWORK_ERROR"];
+    const codes = ["AUTH_REQUIRED", "HOUSEHOLD_LOAD_FAILED", "CHILD_LOAD_FAILED", "LOCAL_PROFILE_DUPLICATE", "PROFILE_CREATION_CONFLICT", "V2_NOT_ACTIVATED", "LOCAL_INVALID", "BACKUP_REQUIRED", "MAPPING_REQUIRED", "MAPPING_CONFLICT", "MAPPING_STALE", "CLOUD_INITIALIZED", "IMPORT_NOT_ALLOWED", "MIGRATION_CONFLICT", "NETWORK_ERROR"];
     const explicit = codes.find(code => message.includes(code));
     if (explicit) return explicit;
     if (/BACKUP/.test(message)) return "BACKUP_REQUIRED";
@@ -148,7 +258,8 @@
   }
 
   return Object.freeze({
-    readLocalProfiles, requireProfile, createBackup, applyMigration,
+    readLocalProfiles, requireProfile, previewLocalProfileCreation, createLocalProfile, compareProfileToCloud,
+    resolveBackupSource, createBackup, applyMigration,
     createMappingPreview, saveMapping, createImportPreview, canExecuteImport, safeError, isRetryableNetworkError,
   });
 });

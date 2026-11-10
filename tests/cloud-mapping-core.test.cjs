@@ -85,6 +85,19 @@ test("同じcloud childの重複mappingを拒否する", () => {
   assert.throws(() => core.saveMapping(store, { localChildKey: core.LOCAL_CHILD_KEY, supabaseChildId: "c1", householdId: "h1" }), /複数/);
 });
 
+test("v2 previewはexisting mappingを返し、stale mappingを拒否する", () => {
+  const localProfile = { localChildKey: "11111111-1111-4111-8111-111111111111", displayName: "Child C" };
+  const child = { id: "child-c", householdId: "house-a", displayName: "Child C" };
+  const existing = JSON.stringify({ appId: "hapichike", version: 2, mappings: [{
+    localChildKey: localProfile.localChildKey, supabaseChildId: child.id, householdId: "house-a", confirmedAt: "2026-11-01T00:00:00.000Z",
+  }] });
+  const preview = core.createV2MappingPreview({ localProfile, cloudChild: child, householdId: "house-a", visibleChildren: [child], mappingRaw: existing });
+  assert.equal(preview.existingMapping.supabaseChildId, "child-c");
+  assert.equal(preview.valid, true);
+  const stale = existing.replace("child-c", "missing-child");
+  assert.throws(() => core.createV2MappingPreview({ localProfile, cloudChild: child, householdId: "house-a", visibleChildren: [child], mappingRaw: stale }), /MAPPING_STALE/);
+});
+
 test("Phase 2 payload案を生成するが送信処理を持たない", () => {
   const child = core.parseLocalState(JSON.stringify(validState));
   const payload = core.createImportPayloadProposal(child, "c1");

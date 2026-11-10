@@ -7,6 +7,7 @@ const root = path.join(__dirname, "..");
 const ui = fs.readFileSync(path.join(root, "src", "cloud-mapping-ui.js"), "utf8");
 const rewardsApi = fs.readFileSync(path.join(root, "src", "services", "api", "rewardsApi.js"), "utf8");
 const index = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const compatibilityCopy = fs.readFileSync(path.join(root, "homecasino.html.txt"), "utf8");
 const parentIndex = fs.readFileSync(path.join(root, "parent", "index.html"), "utf8");
 
 test("初回import UIはread-only情報を取得し、専用RPC wrapperだけを使う", () => {
@@ -77,4 +78,13 @@ test("親ダッシュボード内にread-onlyクラウド管理がある", () =>
   assert.match(index, /window\.location\.hash === "#parent-cloud"/);
   assert.match(index, /if \(openCloudMappingAfterParentUnlock\) openParentSettings\(\)/);
   assert.match(index, /openCloudMapping\(\)/);
+});
+
+test("本体のクラウド管理導線は互換コピーを含めてsame-originの /parent/ を使う", () => {
+  for (const source of [index, compatibilityCopy]) {
+    assert.match(source, /id="openProfileMigrationBtn" href="\/parent\/"/);
+    assert.match(source, /id="openCloudMappingBtn" href="\/parent\/"/);
+    assert.doesNotMatch(source, /window\.location\.assign\("\/parent\/"\)/);
+    assert.doesNotMatch(source, /parent\/index\.html|https?:\/\/[^\s"']+\/parent/);
+  }
 });

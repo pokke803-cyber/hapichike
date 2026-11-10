@@ -119,6 +119,7 @@ test("v2 backupは複数profile・activeLocalChildKey・householdSharedを含み
     householdShared: { parentSettings: { password: "secret", theme: "light" } },
   };
   storage.setItem(backup.V2_STORAGE_KEY, JSON.stringify(v2));
+  storage.setItem(backup.V2_ACTIVATION_KEY, "active");
   const envelope = backup.createBackup(storage, "2026-11-04T00:00:00.000Z");
   assert.equal(envelope.version, 2);
   assert.deepEqual(Object.keys(envelope.data[backup.V2_STORAGE_KEY].profiles).sort(), ["local-a", "local-c"]);
@@ -132,13 +133,41 @@ test("v2 backupは複数profile・activeLocalChildKey・householdSharedを含み
 test("v2 restoreはv1互換を維持しv2 readback失敗時に両方rollbackする", () => {
   const source = storageFor(sampleState({ coins: 7 }));
   source.setItem(backup.V2_STORAGE_KEY, JSON.stringify({
-    appId: "hapichike", version: 2, activeLocalChildKey: null, profiles: {}, householdShared: {},
+    appId: "hapichike", version: 2, activeLocalChildKey: "local-a", profiles: { "local-a": {} }, householdShared: {},
   }));
+  source.setItem(backup.V2_ACTIVATION_KEY, "active");
   const envelope = backup.createBackup(source);
   const target = storageFor(sampleState({ coins: 1 }));
   backup.restore(target, envelope);
   assert.equal(JSON.parse(target.getItem(backup.STORAGE_KEY)).coins, 7);
   assert.equal(JSON.parse(target.getItem(backup.V2_STORAGE_KEY)).version, 2);
+});
+
+test("未activationではv2 missingまたは空storeでもlegacy v1 backupを作る", () => {
+  const missing = storageFor(sampleState({ coins: 7 }));
+  assert.equal(backup.createBackup(missing).version, backup.LEGACY_VERSION);
+
+  const unactivated = storageFor(sampleState({ coins: 8 }));
+  unactivated.setItem(backup.V2_STORAGE_KEY, JSON.stringify({
+    appId: "hapichike", version: 2, activeLocalChildKey: null, profiles: {}, householdShared: {},
+  }));
+  assert.equal(backup.createBackup(unactivated).version, backup.LEGACY_VERSION);
+});
+
+test("activation済みでactive keyまたはprofileが不正ならbackupを拒否する", () => {
+  const missingActive = storageFor();
+  missingActive.setItem(backup.V2_ACTIVATION_KEY, "active");
+  missingActive.setItem(backup.V2_STORAGE_KEY, JSON.stringify({
+    appId: "hapichike", version: 2, activeLocalChildKey: null, profiles: {}, householdShared: {},
+  }));
+  assert.throws(() => backup.createBackup(missingActive), /active Local profile/);
+
+  const missingProfile = storageFor();
+  missingProfile.setItem(backup.V2_ACTIVATION_KEY, "active");
+  missingProfile.setItem(backup.V2_STORAGE_KEY, JSON.stringify({
+    appId: "hapichike", version: 2, activeLocalChildKey: "missing", profiles: {}, householdShared: {},
+  }));
+  assert.throws(() => backup.createBackup(missingProfile), /profile/);
 });
 
 test("不正型、Infinity、prototype pollutionを拒否", () => {

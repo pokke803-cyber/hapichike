@@ -54,7 +54,7 @@ test("main entryはlocal state依存moduleを明示順で先にimportする", ()
 });
 
 test("mainのUMD依存moduleはbrowser bundleでrequire分岐に入らない", () => {
-  for (const file of ["local-state-adapter.js", "profile-domain.js", "profile-migration.js"]) {
+  for (const file of ["local-state-adapter.js", "profile-domain.js", "profile-repository.js", "profile-migration.js"]) {
     const source = fs.readFileSync(path.join(__dirname, "..", "src", file), "utf8");
     assert.match(source, /module\.exports && typeof require === "function"/);
   }

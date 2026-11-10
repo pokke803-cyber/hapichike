@@ -140,6 +140,14 @@
                 </div>
               </article>
 
+              <article class="management-card comparison-card">
+                <div class="card-heading"><div><h3>Local profile追加</h3><p class="detail-text">表示中のCloud Childを名前の参照元として、残高0・空のChild別状態を新規作成します。Cloudデータはコピーも更新もしません。</p></div><button id="profileCreationPreviewButton" class="secondary-button" type="button">作成preview</button></div>
+                <pre id="profileCreationPreviewResult" class="preview-result">previewはまだ実行されていません。</pre>
+                <label class="approval-line"><input id="profileCreationApproval" type="checkbox" disabled> 表示中Child用の新規Local profileであることと、Cloud write 0を確認しました</label>
+                <button id="profileCreationButton" class="danger-button" type="button" disabled>このChild用のLocal profileを作成</button>
+                <p id="profileCreationMessage" class="action-message" role="status"></p>
+              </article>
+
               <div class="management-grid">
                 <article class="management-card"><h3>Local identity</h3><p id="localIdentitySummary"></p></article>
                 <article class="management-card"><h3>Mapping状態</h3><p id="mappingSummary"></p><p id="mappingDetails" class="detail-text"></p></article>
@@ -177,6 +185,7 @@
 
               <article class="management-card comparison-card">
                 <div class="card-heading"><div><h3>Cloud mapping</h3><p id="mappingPreviewMessage" class="detail-text">Local profileとCloud Childを選択してください。</p></div><button id="mappingPreviewButton" class="secondary-button" type="button">mapping preview</button></div>
+                <pre id="mappingPreviewResult" class="preview-result">previewはまだ実行されていません。</pre>
                 <label class="approval-line"><input id="mappingApproval" type="checkbox" disabled> 表示されたLocalとCloudの対応を確認しました</label>
                 <button id="mappingSaveButton" class="danger-button" type="button" disabled>mappingを保存</button>
                 <p id="mappingActionMessage" class="action-message" role="status"></p>

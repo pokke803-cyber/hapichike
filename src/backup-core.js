@@ -11,6 +11,7 @@
   const APP = "hapichike";
   const STORAGE_KEY = "kidsVegasCasino.v1";
   const V2_STORAGE_KEY = "kidsVegasCasino.v2";
+  const V2_ACTIVATION_KEY = "kidsVegasCasino.v2.activation";
   const EMAIL_KEY = "kidsVegasCasino.parentEmail.v1";
   const SAFETY_KEY = "kidsVegasCasino.restoreSafety.v1";
   const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);
@@ -99,9 +100,14 @@
     return envelope;
   }
 
-  function createBackup(storage, createdAt = new Date().toISOString()) {
+  function createBackup(storage, createdAt = new Date().toISOString(), options = {}) {
     const mainState = parseMainState(storage.getItem(STORAGE_KEY));
-    const v2Store = parseV2Store(storage.getItem(V2_STORAGE_KEY));
+    const mode = options.mode || (storage.getItem(V2_ACTIVATION_KEY) === "active" ? "v2" : "legacy");
+    if (mode !== "legacy" && mode !== "v2") throw new Error("backup modeが不正です。");
+    const v2Store = mode === "v2" ? parseV2Store(storage.getItem(V2_STORAGE_KEY)) : null;
+    if (mode === "v2" && (!v2Store || !v2Store.activeLocalChildKey)) {
+      throw new Error("activation済みのactive Local profileが見つかりません。");
+    }
     return makeEnvelope(mainState, storage.getItem(EMAIL_KEY) || "", createdAt, v2Store);
   }
 
@@ -265,5 +271,5 @@
     return `hapichike-backup-${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}-${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}.json`;
   }
 
-  return { FORMAT, LEGACY_VERSION, VERSION, APP, STORAGE_KEY, V2_STORAGE_KEY, EMAIL_KEY, SAFETY_KEY, parseMainState, parseV2Store, createBackup, parseBackup, validateEnvelope, preview, restore, filename, stripSecrets };
+  return { FORMAT, LEGACY_VERSION, VERSION, APP, STORAGE_KEY, V2_STORAGE_KEY, V2_ACTIVATION_KEY, EMAIL_KEY, SAFETY_KEY, parseMainState, parseV2Store, createBackup, parseBackup, validateEnvelope, preview, restore, filename, stripSecrets };
 });

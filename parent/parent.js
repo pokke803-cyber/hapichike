@@ -13,6 +13,7 @@ import "../src/backup-core.js";
 import "../src/cloud-mapping-core.js";
 import "../src/initial-import-core.js";
 import "../src/profile-domain.js";
+import "../src/profile-repository.js";
 import "../src/profile-migration.js";
 import "../src/parent/parent-runtime.js";
 import "../src/parent/cloud-management-core.js";
@@ -30,9 +31,10 @@ const elements = Object.fromEntries([
   "cloudManagement", "mappingSummary", "mappingDetails", "localIdentitySummary", "comparisonMessage", "comparisonBody",
   "importSummary", "importDetails", "backupSummary", "backupDetails", "diagnosticGrid", "migrationPreviewButton", "migrationPreviewResult",
   "cloudIdentityName", "localProfileSelect", "identityMappingState", "createBackupButton", "selectRestoreButton", "restoreFileInput",
+  "profileCreationPreviewButton", "profileCreationPreviewResult", "profileCreationApproval", "profileCreationButton", "profileCreationMessage",
   "restorePreviewResult", "restoreApprovalLabel", "restoreApproval", "executeRestoreButton", "backupActionMessage",
   "migrationApprovals", "migrationApplyButton", "migrationActionMessage", "mappingPreviewMessage", "mappingPreviewButton",
-  "mappingApproval", "mappingSaveButton", "mappingActionMessage", "importPreviewButton", "importPreviewResult", "importApprovals",
+  "mappingPreviewResult", "mappingApproval", "mappingSaveButton", "mappingActionMessage", "importPreviewButton", "importPreviewResult", "importApprovals",
   "importExecuteButton", "importActionMessage",
 ].map(id => [id, document.getElementById(id)]));
 
@@ -52,8 +54,10 @@ let migrationPreview = null;
 let mappingPreview = null;
 let initialImportPreview = null;
 let pendingRestoreEnvelope = null;
+let profileCreationPreview = null;
 let selectedLocalChildKey = "";
 let importing = false;
+let mappingPreviewPhase = "idle";
 
 function showOnly(view) {
   [elements.configView, elements.loginView, elements.loadingView, elements.dashboardView]
@@ -120,13 +124,23 @@ function localProfiles() {
 
 function resetActionPreviews() {
   mappingPreview = null;
+  mappingPreviewPhase = "idle";
   initialImportPreview = null;
   elements.mappingApproval.checked = false;
   elements.mappingApproval.disabled = true;
   elements.importApprovals.querySelectorAll("input").forEach(input => { input.checked = false; });
   elements.importApprovals.disabled = true;
   elements.mappingPreviewMessage.textContent = "Local profileとCloud Childを選択してください。";
+  elements.mappingPreviewResult.textContent = "previewはまだ実行されていません。";
   elements.importPreviewResult.textContent = "readinessとmappingを確認してください。";
+}
+
+function resetProfileCreationPreview() {
+  profileCreationPreview = null;
+  elements.profileCreationApproval.checked = false;
+  elements.profileCreationApproval.disabled = true;
+  elements.profileCreationButton.disabled = true;
+  elements.profileCreationPreviewResult.textContent = "previewはまだ実行されていません。";
 }
 
 function selectedBackupCurrent() {
@@ -161,8 +175,10 @@ function renderCloudManagement(state) {
   const model = globalThis.HapichikeParentCloudManagement.inspect(window.localStorage, state);
   const map = model.mapping;
   const profiles = localProfiles();
+  if (profileCreationPreview?.cloudChildId !== state.parentViewedSupabaseChildId) resetProfileCreationPreview();
   if (selectedLocalChildKey && !profiles.some(profile => profile.localChildKey === selectedLocalChildKey)) selectedLocalChildKey = "";
-  if (!selectedLocalChildKey) selectedLocalChildKey = profiles.find(profile => profile.active)?.localChildKey ?? "";
+  if (!selectedLocalChildKey) selectedLocalChildKey = profiles.find(profile => profile.active)?.localChildKey
+    ?? profiles.find(profile => profile.kind === "legacy")?.localChildKey ?? "";
   const profileOptions = [Object.assign(document.createElement("option"), { value: "", textContent: "Local profileを明示選択" })];
   profiles.forEach(profile => {
     const option = document.createElement("option");
@@ -179,10 +195,19 @@ function renderCloudManagement(state) {
   elements.mappingDetails.textContent = map.item
     ? `localChildKey: ${map.item.localChildKey} / mapped Supabase Child: ${map.item.supabaseChildId} / household: ${map.householdMatches ? "一致" : "不一致"}。${map.viewedChildMatches ? "このLocal profileは現在表示中のChildに対応しています" : "現在表示中のChildとは対応していません"}`
     : "比較対象のLocal profileが未確定です。Local profileの所有者が未確定です。";
-  elements.comparisonMessage.textContent = model.localProfile.unresolved
-    ? "比較対象のLocal profileが未確定です。名前だけでは対応付けません。"
-    : `${model.localProfile.source} とCloudを比較しています。${model.mismatch ? "ローカルとクラウドの残高が一致していません" : "6残高は一致しています"}`;
-  elements.comparisonBody.replaceChildren(...model.comparison.map(row => {
+  let comparison = model.comparison;
+  let comparisonSource = model.localProfile.source;
+  if (selectedLocalChildKey) {
+    try {
+      comparison = globalThis.HapichikeParentCloudActions.compareProfileToCloud(window.localStorage, selectedLocalChildKey, state.viewedChildBalance);
+      comparisonSource = profiles.find(profile => profile.localChildKey === selectedLocalChildKey)?.displayName ?? "選択中Local profile";
+    } catch { /* mapped comparison or unresolved message remains */ }
+  }
+  const comparisonMismatch = comparison.some(row => row.difference !== null && row.difference !== 0);
+  elements.comparisonMessage.textContent = comparison.length
+    ? `${comparisonSource} と表示中Cloud Childをread-only比較しています。${comparisonMismatch ? "ローカルとクラウドの残高が一致していません" : "6残高は一致しています"}`
+    : "比較対象のLocal profileを明示選択してください。名前だけでは対応付けません。";
+  elements.comparisonBody.replaceChildren(...comparison.map(row => {
     const tr = document.createElement("tr");
     [row.label, valueLabel(row.local), valueLabel(row.cloud), row.difference === null ? "--" : `${row.difference > 0 ? "+" : ""}${row.difference}`].forEach(value => { const td = document.createElement("td"); td.textContent = value; tr.append(td); });
     return tr;
@@ -197,7 +222,63 @@ function renderCloudManagement(state) {
   elements.diagnosticGrid.replaceChildren(...Object.entries(model.diagnostic).map(([key, value]) => { const div = document.createElement("div"); const dt = document.createElement("dt"); const dd = document.createElement("dd"); dt.textContent = key; dd.textContent = statusLabel(value); div.append(dt, dd); return div; }));
   if (migrationPreview?.targetCloudChild.id !== state.parentViewedSupabaseChildId) migrationPreview = null;
   renderMigrationPreview();
+  renderMappingPreview();
   renderActionButtons(model);
+}
+
+function shortId(value) {
+  const text = String(value || "");
+  return text.length > 12 ? `${text.slice(0, 8)}…` : text || "--";
+}
+
+function renderMappingPreview() {
+  if (!mappingPreview) {
+    if (mappingPreviewPhase === "idle") elements.mappingPreviewResult.textContent = "previewはまだ実行されていません。";
+    return;
+  }
+  elements.mappingPreviewResult.textContent = [
+    "handler：実行済み",
+    "preview core：成功",
+    `Local：${mappingPreview.localDisplayName}（localChildKey ${shortId(mappingPreview.localChildKey)}）`,
+    `Cloud：${mappingPreview.cloudDisplayName}（${shortId(mappingPreview.supabaseChildId)}）`,
+    `Household：${mappingPreview.householdDisplayName || mappingPreview.householdId}（${mappingPreview.householdId}）`,
+    `existing mapping：${mappingPreview.existingMapping ? `${shortId(mappingPreview.existingMapping.localChildKey)} → ${shortId(mappingPreview.existingMapping.supabaseChildId)}` : "なし"}`,
+    `duplicate conflict：${mappingPreview.duplicateConflict ? "あり" : "なし"}`,
+    `stale：${mappingPreview.stale ? "あり" : "なし"}`,
+    `判定：${mappingPreview.valid ? "Mapping可能" : "Mapping不可"}`,
+    "preview write：0 / mapping save：0",
+  ].join("\n");
+}
+
+function mappingPreviewError(error, state) {
+  const code = globalThis.HapichikeParentCloudActions.safeError(error);
+  const text = ({
+    LOCAL_INVALID: "Local profile未取得。migration後のLocal stateを再読込してください。",
+    CHILD_LOAD_FAILED: state?.parentViewedSupabaseChildId ? "Cloud Child情報がstaleです。runtime refreshが必要です。" : "Cloud Child未選択です。",
+    HOUSEHOLD_LOAD_FAILED: "Household未取得です。runtime refreshが必要です。",
+    MAPPING_CONFLICT: "Household不一致、または同じCloud Childへのduplicate mappingです。",
+    MAPPING_STALE: "既存mappingがstaleです。runtime refresh後にmappingを確認してください。",
+  })[code] ?? "preview core error。安全のためMapping不可としました。runtime refresh後に再試行してください。";
+  return { code: code || "PREVIEW_ERROR", text };
+}
+
+function renderMappingPreviewError(error, state) {
+  const safe = mappingPreviewError(error, state);
+  const details = error?.previewDetails ?? {};
+  elements.mappingPreviewMessage.textContent = safe.text;
+  elements.mappingPreviewResult.textContent = [
+    "handler：実行済み",
+    "preview core：error",
+    `Local：${details.localDisplayName ?? (selectedLocalChildKey ? shortId(selectedLocalChildKey) : "未取得")}（localChildKey ${shortId(details.localChildKey ?? selectedLocalChildKey)}）`,
+    `Cloud：${details.cloudDisplayName ?? selectedChild(state)?.displayName ?? "未選択"}`,
+    `Household：${details.householdId ?? state?.selectedHouseholdId ?? "未取得"}`,
+    `existing mapping：${details.existingMapping ? `${shortId(details.existingMapping.localChildKey)} → ${shortId(details.existingMapping.supabaseChildId)}` : "なし"}`,
+    `duplicate conflict：${details.duplicateConflict ? "あり" : "なし"}`,
+    `stale：${details.stale ? "あり" : "なし"}`,
+    `判定：Mapping不可（${safe.code}）`,
+    "preview write：0 / mapping save：0",
+  ].join("\n");
+  setActionMessage(elements.mappingActionMessage, safe.text);
 }
 
 function renderMigrationPreview() {
@@ -462,9 +543,13 @@ function actionError(error) {
     CHILD_LOAD_FAILED: "CHILD_LOAD_FAILED: Child一覧が古い可能性があります。再読込してください。", LOCAL_INVALID: "LOCAL_INVALID: Local profileを確認してください。",
     BACKUP_REQUIRED: "BACKUP_REQUIRED: 現在のLocal snapshotに一致するbackupが必要です。", MAPPING_REQUIRED: "MAPPING_REQUIRED: mappingを先に保存してください。",
     MAPPING_CONFLICT: "MAPPING_CONFLICT: 同じCloud Childへの重複または家庭不一致です。", CLOUD_INITIALIZED: "CLOUD_INITIALIZED: Cloudは初期化済みのためimportできません。",
+    MAPPING_STALE: "MAPPING_STALE: 既存mappingが古いため、状態を再読込してください。",
+    LOCAL_PROFILE_DUPLICATE: "LOCAL_PROFILE_DUPLICATE: このCloud Child用のLocal profileはすでにあります。",
+    PROFILE_CREATION_CONFLICT: "PROFILE_CREATION_CONFLICT: preview後に状態が変わりました。再確認してください。",
+    V2_NOT_ACTIVATED: "V2_NOT_ACTIVATED: v2 activation済み環境でのみ追加できます。",
     IMPORT_NOT_ALLOWED: "IMPORT_NOT_ALLOWED: readiness条件を満たしていません。", MIGRATION_CONFLICT: "MIGRATION_CONFLICT: preview・競合・承認を確認してください。",
     NETWORK_ERROR: "NETWORK_ERROR: 接続を確認し、状態を再読込してください。",
-  })[code];
+  })[code] ?? "処理に失敗しました。状態を再読込して再試行してください。";
 }
 
 function setActionMessage(element, message, success = false) {
@@ -490,9 +575,51 @@ elements.localProfileSelect.addEventListener("change", () => {
   renderCloudManagement(runtime.getState());
 });
 
+elements.profileCreationPreviewButton.addEventListener("click", () => {
+  const state = runtime.getState();
+  try {
+    profileCreationPreview = globalThis.HapichikeParentCloudActions.previewLocalProfileCreation(window.localStorage, {
+      cloudChild: selectedChild(state), householdId: state.selectedHouseholdId, visibleChildren: state.cloudChildren.items,
+    });
+    elements.profileCreationPreviewResult.textContent = [
+      `Cloud Child: ${profileCreationPreview.childName} (${profileCreationPreview.cloudChildId})`,
+      "Local profile: 新規UUID v4を作成時に発行",
+      `6残高: ${Object.values(profileCreationPreview.balances).join(" / ")}`,
+      `task assignment: ${profileCreationPreview.taskAssignments} / history: ${profileCreationPreview.historyEntries}`,
+      `progress: ${profileCreationPreview.progress} / reset: ${profileCreationPreview.resetState}`,
+      `activeLocalChildKey: ${profileCreationPreview.activeLocalChildKey}（変更しません）`,
+      "Cloud残高コピー: なし / Cloud write: 0 / mapping save: 0",
+    ].join("\n");
+    elements.profileCreationApproval.checked = false;
+    elements.profileCreationApproval.disabled = false;
+    elements.profileCreationButton.disabled = true;
+    setActionMessage(elements.profileCreationMessage, "Local writeの実行前に内容を目視確認してください。");
+  } catch (error) {
+    resetProfileCreationPreview();
+    setActionMessage(elements.profileCreationMessage, actionError(error));
+  }
+});
+elements.profileCreationApproval.addEventListener("change", () => {
+  elements.profileCreationButton.disabled = !profileCreationPreview || !elements.profileCreationApproval.checked;
+});
+elements.profileCreationButton.addEventListener("click", async () => {
+  const state = runtime.getState();
+  try {
+    const result = globalThis.HapichikeParentCloudActions.createLocalProfile(window.localStorage, profileCreationPreview, {
+      parentApproved: elements.profileCreationApproval.checked,
+      cloudChild: selectedChild(state), householdId: state.selectedHouseholdId, visibleChildren: state.cloudChildren.items,
+    });
+    selectedLocalChildKey = result.profile.localChildKey;
+    resetProfileCreationPreview();
+    resetActionPreviews();
+    await runtime.readLocalIdentityState();
+    setActionMessage(elements.profileCreationMessage, `Local profileを作成しました: ${result.profile.childName}。active ChildとCloudは変更していません。`, true);
+    renderCloudManagement(runtime.getState());
+  } catch (error) { setActionMessage(elements.profileCreationMessage, actionError(error)); }
+});
+
 elements.createBackupButton.addEventListener("click", () => {
   try {
-    if (!selectedLocalChildKey) throw new Error("LOCAL_INVALID");
     const result = globalThis.HapichikeParentCloudActions.createBackup(window.localStorage, selectedLocalChildKey);
     downloadBackup(result.envelope);
     setActionMessage(elements.backupActionMessage, `backupを作成しました（format v${result.envelope.version} / ${result.profile.displayName}）。`, true);
@@ -512,7 +639,7 @@ elements.restoreFileInput.addEventListener("change", async () => {
     const current = JSON.parse(window.localStorage.getItem(globalThis.HapichikeBackup.STORAGE_KEY) || "null");
     const details = globalThis.HapichikeBackup.preview(envelope, current);
     pendingRestoreEnvelope = envelope;
-    elements.restorePreviewResult.textContent = [`created_at: ${details.createdAt}`, `format version: ${details.version}`, `childName: ${details.childName}`, `v2 profiles: ${details.profileCount}`, `activeLocalChildKey: ${details.activeLocalChildKey || "なし"}`, ...details.rows.map(row => `${row[0]}: ${valueLabel(row[1])} → ${valueLabel(row[2])}`)].join("\n");
+    elements.restorePreviewResult.textContent = [`created_at: ${details.createdAt}`, `format version: ${details.version}`, `childName: ${details.childName}`, `v2 profiles: ${details.profileCount}`, ...details.profiles.map(profile => `- ${profile.childName} (${profile.localChildKey})${profile.active ? " [active]" : ""}`), `activeLocalChildKey: ${details.activeLocalChildKey || "なし"}`, ...details.rows.map(row => `${row[0]}: ${valueLabel(row[1])} → ${valueLabel(row[2])}`)].join("\n");
     elements.restoreApprovalLabel.hidden = false;
     elements.executeRestoreButton.hidden = false;
     setActionMessage(elements.backupActionMessage, "restore previewです。まだLocalデータは変更されていません。", true);
@@ -539,23 +666,51 @@ elements.migrationApplyButton.addEventListener("click", async () => {
     selectedLocalChildKey = result.localChildKey;
     migrationPreview = null;
     setActionMessage(elements.migrationActionMessage, `migration完了: ${result.localChildKey}。v1とsafety copyは保持されています。`, true);
-    void runtime.readLocalIdentityState();
+    resetActionPreviews();
+    await runtime.readLocalIdentityState();
+    const refreshedProfiles = localProfiles();
+    if (!refreshedProfiles.some(profile => profile.localChildKey === result.localChildKey)) throw new Error("LOCAL_INVALID");
+    selectedLocalChildKey = result.localChildKey;
+    renderCloudManagement(runtime.getState());
   } catch (error) { setActionMessage(elements.migrationActionMessage, actionError(error)); }
 });
 
-elements.mappingPreviewButton.addEventListener("click", () => {
-  const state = runtime.getState();
+async function handleMappingPreview() {
+  mappingPreview = null;
+  mappingPreviewPhase = "refreshing";
+  elements.mappingPreviewMessage.textContent = "handler実行：migration後のLocal v2 stateを再読込しています。";
+  elements.mappingPreviewResult.textContent = "handler：実行済み\npreview core：呼出前（Local state再読込中）\n判定：確認中\npreview write：0 / mapping save：0";
   try {
+    await runtime.readLocalIdentityState();
+    const state = runtime.getState();
+    const profiles = localProfiles();
+    if (!selectedLocalChildKey || !profiles.some(profile => profile.localChildKey === selectedLocalChildKey)) {
+      selectedLocalChildKey = profiles.find(profile => profile.active && profile.kind === "v2")?.localChildKey ?? "";
+    }
+    if (!selectedLocalChildKey) throw new Error("LOCAL_INVALID");
+    mappingPreviewPhase = "core";
     mappingPreview = globalThis.HapichikeParentCloudActions.createMappingPreview(window.localStorage, {
       localChildKey: selectedLocalChildKey, cloudChild: selectedChild(state), householdId: state.selectedHouseholdId, visibleChildren: state.cloudChildren.items,
     });
+    mappingPreview.householdDisplayName = state.households.items.find(item => item.id === state.selectedHouseholdId)?.name ?? mappingPreview.householdId;
+    mappingPreviewPhase = "success";
     elements.mappingPreviewMessage.textContent = mappingPreview.message;
     elements.mappingApproval.checked = false;
     elements.mappingApproval.disabled = false;
     setActionMessage(elements.mappingActionMessage, "保存前にLocal / Cloud / Householdを目視確認してください。");
-  } catch (error) { mappingPreview = null; setActionMessage(elements.mappingActionMessage, actionError(error)); }
-  renderCloudManagement(state);
-});
+    renderCloudManagement(state);
+  } catch (error) {
+    mappingPreview = null;
+    mappingPreviewPhase = "error";
+    const state = runtime.getState();
+    renderCloudManagement(state);
+    try { renderMappingPreviewError(error, state); }
+    catch { elements.mappingActionMessage.textContent = "preview render error。結果を表示できませんでした。runtime refresh後に再試行してください。"; }
+  }
+}
+
+elements.mappingPreviewButton.addEventListener("click", handleMappingPreview);
+elements.mappingPreviewButton.dataset.handlerRegistered = "true";
 elements.mappingApproval.addEventListener("change", () => renderCloudManagement(runtime.getState()));
 elements.mappingSaveButton.addEventListener("click", async () => {
   const state = runtime.getState();

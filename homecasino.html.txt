@@ -1433,6 +1433,7 @@
     }
 
     .parent-menu-button {
+      display: block;
       border: 3px solid #fff;
       border-radius: 22px;
       padding: 16px;
@@ -1440,6 +1441,7 @@
       color: #23324d;
       font-weight: 900;
       text-align: left;
+      text-decoration: none;
       box-shadow: 0 7px 0 rgba(39, 48, 67, .12);
       cursor: pointer;
     }
@@ -3178,14 +3180,14 @@
             <strong>💾 データ管理</strong>
             端末データのバックアップ書き出し・確認・復元ができます。
           </button>
-          <button class="parent-menu-button" type="button" id="openProfileMigrationBtn">
+          <a class="parent-menu-button" id="openProfileMigrationBtn" href="/parent/">
             <strong>👤 子どもデータの移行（みまもりダッシュボード）</strong>
             クラウド管理はみまもりダッシュボードで行います。
-          </button>
-          <button class="parent-menu-button" type="button" id="openCloudMappingBtn">
+          </a>
+          <a class="parent-menu-button" id="openCloudMappingBtn" href="/parent/">
             <strong>☁️ クラウド管理（みまもりダッシュボード）</strong>
             Local / Cloud比較、mapping、初回登録はみまもりダッシュボードで行います。
-          </button>
+          </a>
         </div>
         <div class="parent-save-row">
           <button class="secondary" type="button" id="parentMenuBackBtn">もどる</button>
@@ -6721,8 +6723,6 @@
     document.getElementById("openParentTicketGiftBtn").addEventListener("click", openParentTicketGift);
     document.getElementById("openParentEmailSettingsBtn").addEventListener("click", openParentEmailSettings);
     document.getElementById("openBackupRestoreBtn").addEventListener("click", openBackupRestore);
-    document.getElementById("openProfileMigrationBtn").addEventListener("click", () => window.location.assign("/parent/"));
-    document.getElementById("openCloudMappingBtn").addEventListener("click", () => window.location.assign("/parent/"));
     document.getElementById("parentRewardBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentPayTransferBackBtn").addEventListener("click", openParentMenu);
     document.getElementById("parentEmailBackBtn").addEventListener("click", openParentMenu);

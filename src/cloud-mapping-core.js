@@ -184,11 +184,44 @@
 
   function createV2MappingPreview({ localProfile, cloudChild, householdId, visibleChildren, mappingRaw }) {
     if (localProfile?.localChildKey === LOCAL_CHILD_KEY) throw new Error("LOCAL_INVALID");
-    const preview = createMappingPreview({ localProfile, cloudChild, householdId, visibleChildren, mappingRaw: null });
     const document = parseV2MappingDocument(mappingRaw);
+    const existingMapping = document.mappings.find(item => item.localChildKey === localProfile.localChildKey) ?? null;
+    const details = {
+      localChildKey: localProfile?.localChildKey ?? null,
+      localDisplayName: String(localProfile?.displayName || localProfile?.name || "名前未設定"),
+      supabaseChildId: cloudChild?.id ?? null,
+      cloudDisplayName: String(cloudChild?.displayName || "名前未設定"),
+      householdId: householdId || null,
+      existingMapping: existingMapping ? { ...existingMapping } : null,
+      duplicateConflict: false,
+      stale: false,
+      valid: false,
+    };
+    let preview;
+    try { preview = createMappingPreview({ localProfile, cloudChild, householdId, visibleChildren, mappingRaw: null }); }
+    catch (error) { error.previewDetails = details; throw error; }
+    const stale = Boolean(existingMapping && (existingMapping.householdId !== householdId
+      || !(visibleChildren ?? []).some(child => child.id === existingMapping.supabaseChildId && child.householdId === householdId)));
+    if (stale) {
+      const error = new Error("MAPPING_STALE");
+      error.previewDetails = { ...details, stale: true };
+      throw error;
+    }
     const cloudConflict = document.mappings.find(item => item.supabaseChildId === cloudChild.id && item.localChildKey !== localProfile.localChildKey);
-    if (cloudConflict) throw new Error("MAPPING_CONFLICT");
-    return { ...preview, sourceMappingRaw: mappingRaw ?? null, mappingVersion: 2 };
+    if (cloudConflict) {
+      const error = new Error("MAPPING_CONFLICT");
+      error.previewDetails = { ...details, duplicateConflict: true, conflictingMapping: { ...cloudConflict } };
+      throw error;
+    }
+    return {
+      ...preview,
+      sourceMappingRaw: mappingRaw ?? null,
+      mappingVersion: 2,
+      existingMapping: existingMapping ? { ...existingMapping } : null,
+      duplicateConflict: false,
+      stale: false,
+      valid: true,
+    };
   }
 
   function saveVerifiedV2Mapping(storage, preview, context, confirmedAt = new Date().toISOString()) {

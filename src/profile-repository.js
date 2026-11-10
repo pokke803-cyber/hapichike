@@ -1,8 +1,9 @@
 (function (root, factory) {
-  const core = typeof module === "object" && module.exports
+  const commonJs = typeof module === "object" && module.exports && typeof require === "function";
+  const core = commonJs
     ? require("./child-identity-core.js")
     : root.HapichikeChildIdentity;
-  const domain = typeof module === "object" && module.exports
+  const domain = commonJs
     ? require("./profile-domain.js")
     : root.HapichikeProfileDomain;
   const api = factory(core, domain);
@@ -62,6 +63,18 @@
           { childName: typeof input.childName === "string" ? input.childName : "" },
           { cryptoApi: options.cryptoApi, now },
         );
+        if (Object.prototype.hasOwnProperty.call(input, "pendingCloudIdentity")) {
+          const candidate = input.pendingCloudIdentity;
+          core.assertSafeValue(candidate, "pendingCloudIdentity");
+          if (!core.isPlainObject(candidate)
+            || typeof candidate.supabaseChildId !== "string" || !candidate.supabaseChildId
+            || typeof candidate.householdId !== "string" || !candidate.householdId
+            || typeof candidate.preparedAt !== "string" || !Number.isFinite(Date.parse(candidate.preparedAt))) {
+            throw new Error("pendingCloudIdentity is invalid");
+          }
+          profile.pendingCloudIdentity = core.clone(candidate);
+          core.validateProfile(profile, profile.localChildKey);
+        }
         if (Object.prototype.hasOwnProperty.call(store.profiles, profile.localChildKey)) {
           throw new Error("a profile with this localChildKey already exists");
         }
