@@ -219,6 +219,54 @@ test("reward resolverはactive UUID→mapping→child_idを解決しmissing/dupl
   assert.equal(adapter.resolveRewardChild(storage).reason, "MAPPING_INVALID");
 });
 
+test("Cloud成功eventは開始時Childだけへ差分適用し既存Local/Cloud差分を補正しない", () => {
+  const storage = setup();
+  storage.setItem(mapping.MAPPING_V2_STORAGE_KEY, JSON.stringify({ appId: "hapichike", version: 2, mappings: [
+    { localChildKey: A, supabaseChildId: "cloud-a", householdId: "home-a", confirmedAt: NOW },
+    { localChildKey: C, supabaseChildId: "cloud-c", householdId: "home-a", confirmedAt: NOW },
+  ] }));
+  adapter.applyRewardEvent(storage, { eventId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", localChildKey: A,
+    supabaseChildId: "cloud-a", householdId: "home-a", actionType: "ticket", amount: 1, payType: null, createdAt: NOW });
+  const root = JSON.parse(storage.getItem(adapter.V2_KEY));
+  assert.deepEqual([root.profiles[A].coins, root.profiles[C].coins], [2, 9]);
+  assert.equal(root.profiles[A].history[0].cloudSynced, true);
+});
+
+test("request中にactive Childが切替わっても開始時Childへ固定し現在Childを上書きしない", () => {
+  const storage = setup();
+  storage.setItem(mapping.MAPPING_V2_STORAGE_KEY, JSON.stringify({ appId: "hapichike", version: 2, mappings: [
+    { localChildKey: A, supabaseChildId: "cloud-a", householdId: "home-a", confirmedAt: NOW },
+    { localChildKey: C, supabaseChildId: "cloud-c", householdId: "home-a", confirmedAt: NOW },
+  ] }));
+  adapter.switchActive(storage, C, NOW);
+  const result = adapter.applyRewardEvent(storage, { eventId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", localChildKey: A,
+    supabaseChildId: "cloud-a", householdId: "home-a", actionType: "star_coin", amount: 1, payType: null, createdAt: NOW });
+  const root = JSON.parse(storage.getItem(adapter.V2_KEY));
+  assert.equal(result.active, false);
+  assert.equal(root.activeLocalChildKey, C);
+  assert.deepEqual([root.profiles[A].starCoins, root.profiles[C].starCoins], [1, 0]);
+});
+
+test("同eventのLocal再適用は履歴と残高を二重更新しない", () => {
+  const storage = setup();
+  storage.setItem(mapping.MAPPING_V2_STORAGE_KEY, JSON.stringify({ appId: "hapichike", version: 2, mappings: [
+    { localChildKey: A, supabaseChildId: "cloud-a", householdId: "home-a", confirmedAt: NOW },
+  ] }));
+  const event = { eventId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", localChildKey: A, supabaseChildId: "cloud-a",
+    householdId: "home-a", actionType: "pay", amount: 2, payType: "sweets", createdAt: NOW };
+  adapter.applyRewardEvent(storage, event);
+  assert.equal(adapter.applyRewardEvent(storage, event).alreadyApplied, true);
+  const profileA = JSON.parse(storage.getItem(adapter.V2_KEY)).profiles[A];
+  assert.equal(profileA.points.snack, 2);
+  assert.equal(profileA.history.filter(item => item.eventId === event.eventId).length, 1);
+});
+
+test("activation inactiveとmapping staleはreward Local applyをfail closedする", () => {
+  const storage = setup();
+  storage.removeItem(adapter.ACTIVATION_KEY);
+  assert.equal(adapter.resolveRewardChild(storage).reason, "ACTIVATION_INACTIVE");
+});
+
 test("Local Child切替コードはParent viewed identityを書き換えない", () => {
   const fs = require("node:fs");
   const source = fs.readFileSync(require("node:path").join(__dirname, "../src/local-state-adapter.js"), "utf8");

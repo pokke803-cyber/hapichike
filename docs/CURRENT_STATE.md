@@ -1,6 +1,6 @@
 # Current state
 
-調査基準: 2026-11-04。理想仕様ではなく、現行UIと追加済みSupabase基盤の状態を記録しています。
+調査基準: 2026-11-10。理想仕様ではなく、現行UIと追加済みSupabase基盤の状態を記録しています。
 
 ## 実装済み
 
@@ -25,6 +25,7 @@
 - `kidsVegasCasino.v2` のUUIDローカルプロフィール、active Child切替、Child別残高・割当・履歴・進捗・reset分離
 - v2 activation後の共通Local State adapter（v1へのfallbackを行わないfail-closed方式）
 - legacy v1の所有者明示migration、v2 backup/restore preview、v2 Cloud mappingとreward child resolver
+- active Local v2 Child → mapping v2 → Supabase Childへ固定する通常reward同期（event ID、Cloud idempotency、action lock、retry、Local apply recovery）
 
 ## 現在の画面構成とモード
 
@@ -47,7 +48,7 @@
 ## 現在の制約・未完成機能
 
 - 実legacy migration apply、実v2 mapping保存、実データでの最終activationは親の明示確認が必要です。
-- JSONバックアップ／復元と、明示承認による1回限りのSupabase initial importは実装済みです。通常のcloud syncは未実装です。
+- JSONバックアップ／復元、明示承認による1回限りのSupabase initial import、initial import後の通常reward同期を実装済みです。offline queueと既存残高差分のreconciliationは未実装です。
 - 外部MP3は全て未配置です。Web Audioフォールバックで操作は継続できます。
 - お手伝い状態に `inProgress` の互換処理はありますが、現行UIに開始操作はなく、追加後は直接完了します。
 - 親パスワードの変更UIは確認できません。

@@ -22,9 +22,9 @@
 
 PAY振替と、BET・カード・結果を含むルーレットは005に複合RPCがないため、意味単位の既存RPCを順次実行する。各RPC成功後に必ず最新server balanceをcacheへ反映する。途中失敗時に既にcommitされたRPCは巻き戻せないため、表示cacheはその時点のCloud値を維持する。
 
-## Cache update
+## Local delta update
 
-RPC後に`child_balances`を再取得し、`coins / starCoins / points.snack / points.toy / points.game / happyChanceCards`だけを置換して既存キーへ保存する。タスクとローカル履歴など他フィールドは維持する。
+RPC成功後に同一eventの差分だけを開始時のLocal v2 profileへ適用する。Cloudの全残高でLocalを置換せず、Phase 3開始前からあるLocal/Cloud差分はreconciliation工程まで維持する。
 
 ## Error handling
 
@@ -38,9 +38,9 @@ RPC、再取得、session、network、RLSの失敗時は該当操作のlocal加�
 
 主対象はParent A / Child C。開始値はtickets 3、star 1、3種PAY 0、Happy Chance 0。local test完了後に各+1、starを5まで増加、atomic exchange、star不足、Happy Chance負数、sessionなし、invalid mapping、Parent B越境、二重クリックを確認する。各成功でbalance、local cache、reward_logs増分を照合する。productionは操作しない。
 
-## Future Phase 3B event_id
+## Phase 3A event_id
 
-005 contractは変更せず、event_idとDB idempotencyはPhase 3Bで追加する。
+007 migrationの既存005 RPC overloadへUUID v4 `event_id`を渡し、`reward_mutation_events.event_id`のPRIMARY KEYで二重更新を防止する。同じ操作の通信retryは保存済みeventIdを再利用する。
 
 ## Future Phase 4 offline queue
 

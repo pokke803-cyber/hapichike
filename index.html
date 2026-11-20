@@ -3155,6 +3155,7 @@
       <div class="info-modal-body parent-panel hidden" id="parentMenuPanel">
         <p class="parent-note">おうちの人だけが使う管理メニューです。子ども画面には追加・編集・削除ボタンは表示されません。</p>
         <div class="ticket-gift-summary">⭐ スターコイン：<strong id="parentStarCoinDisplay">0枚</strong></div>
+        <pre class="parent-note" id="rewardSyncDiagnostics">Cloud同期診断を読み込み中…</pre>
         <div class="parent-menu-grid">
           <button class="parent-menu-button" type="button" id="openParentTaskEditBtn">
             <strong>お手伝い編集</strong>
@@ -4092,7 +4093,18 @@
         playSfx("error");
         return false;
       }
-      const result = await bridge.mutate(options);
+      const actionButton = document.activeElement instanceof HTMLButtonElement ? document.activeElement : null;
+      if (actionButton) actionButton.disabled = true;
+      const selector = document.getElementById("localChildSelector");
+      if (selector) selector.disabled = true;
+      showToast("クラウドと同期中…");
+      let result;
+      try {
+        result = await bridge.mutate(options);
+      } finally {
+        if (actionButton) actionButton.disabled = false;
+        if (selector && localStateMode === "v2") selector.disabled = false;
+      }
       if (result?.duplicate) {
         showToast("いま同期中だよ。少しまってね。");
         return false;
@@ -4103,15 +4115,12 @@
         return false;
       }
       if (result?.mode === "cloud") {
-        window.HapichikeOnlineRewardsCore.applyServerBalance(state, result.balance);
-      } else if (result?.mode === "local") {
-        localMutation();
+        state = loadState();
       } else {
         showToast("同期状態を確認できませんでした。");
         playSfx("error");
         return false;
       }
-      saveState();
       return true;
     }
 
@@ -5300,6 +5309,15 @@
     function openParentMenu() {
       const display = document.getElementById("parentStarCoinDisplay");
       if (display) display.textContent = `${state.starCoins}枚`;
+      const diagnostics = document.getElementById("rewardSyncDiagnostics");
+      const values = window.HapichikeOnlineRewards?.getDiagnostics?.();
+      if (diagnostics && values) diagnostics.textContent = [
+        `Active Local Child: ${values.activeLocalChildKey || "なし"}`,
+        `Mapped Cloud Child: ${values.mappedCloudChildId || "なし"}`,
+        `Resolver: ${values.resolverValid ? "VALID" : `INVALID (${values.resolverReason || "unknown"})`}`,
+        `Pending reward events: ${values.pendingRewardEventCount}`,
+        `Local-pending: ${values.localPendingCount}`
+      ].join("\n");
       showParentPanel("parentMenuPanel");
     }
 
@@ -6356,7 +6374,7 @@
 
     async function completeTask(taskId) {
       const task = getTaskById(taskId);
-      const today = getTodayEntry(taskId);
+      let today = getTodayEntry(taskId);
       if (!task || !today || isTaskCompleted(today)) return;
       today.ticketReward = Math.min(5, Math.max(1, Number(task.ticketReward) || 1));
       today.rewardType = getTaskRewardType(task);
@@ -6377,6 +6395,8 @@
           else state.coins += amount;
         });
         if (!committed) return;
+        today = getTodayEntry(taskId);
+        if (!today) return;
         today.ticketGranted = true;
       }
       today.status = "done";

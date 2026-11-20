@@ -199,8 +199,11 @@
   }
 
   function resolveRewardChild(storage, context = {}) {
-    const loaded = load(storage, () => null);
-    if (loaded.mode !== "v2") return { mode: "legacy-local", cloudReady: false, localChildKey: "legacy-single-profile" };
+    if (!hasActivationMarker(storage)) return { mode: "blocked", cloudReady: false, reason: "ACTIVATION_INACTIVE" };
+    let loaded;
+    try { loaded = load(storage, () => null); }
+    catch { return { mode: "blocked", cloudReady: false, reason: "V2_INVALID" }; }
+    if (loaded.mode !== "v2") return { mode: "blocked", cloudReady: false, reason: "V2_INVALID" };
     const localChildKey = loaded.store.activeLocalChildKey;
     let document;
     try { document = mapping.parseV2MappingDocument(storage.getItem(mapping.MAPPING_V2_STORAGE_KEY)); }
@@ -221,9 +224,48 @@
     return { mode: "cloud", cloudReady: true, localChildKey, supabaseChildId: selected.supabaseChildId, householdId: selected.householdId };
   }
 
+  function applyRewardEvent(storage, event, now = new Date().toISOString()) {
+    if (!event || typeof event.eventId !== "string") throw new Error("REWARD_EVENT_INVALID");
+    const store = readV2(storage);
+    core.validateStore(store);
+    const document = mapping.parseV2MappingDocument(storage.getItem(mapping.MAPPING_V2_STORAGE_KEY));
+    const localMatches = document.mappings.filter(item => item.localChildKey === event.localChildKey);
+    if (localMatches.length !== 1 || document.mappings.filter(item => item.supabaseChildId === event.supabaseChildId).length !== 1
+      || localMatches[0].supabaseChildId !== event.supabaseChildId || localMatches[0].householdId !== event.householdId) {
+      throw new Error("MAPPING_STALE");
+    }
+    if (!store.profiles[event.localChildKey]) throw new Error("V2_ACTIVE_PROFILE_MISSING");
+    const next = clone(store);
+    const profile = clone(next.profiles[event.localChildKey]);
+    if (profile.history.some(item => item?.eventId === event.eventId && item?.cloudSynced === true)) {
+      return { applied: false, alreadyApplied: true, active: next.activeLocalChildKey === event.localChildKey };
+    }
+    if (event.actionType === "ticket") profile.coins += event.amount;
+    else if (event.actionType === "star_coin") profile.starCoins += event.amount;
+    else if (event.actionType === "star_exchange") { profile.starCoins -= 5; profile.coins += 1; }
+    else if (event.actionType === "pay") {
+      const key = { sweets: "snack", toy: "toy", game: "game" }[event.payType];
+      if (!key) throw new Error("INVALID_PAY_TYPE");
+      profile.points[key] += event.amount;
+    } else if (event.actionType === "happy_chance") profile.happyChanceCards += event.amount;
+    else throw new Error("REWARD_ACTION_UNSUPPORTED");
+    if (profile.starCoins < 0 || profile.happyChanceCards < 0) throw new Error("LOCAL_BALANCE_INVALID");
+    profile.history.unshift({ eventId: event.eventId, localChildKey: event.localChildKey, childKey: event.localChildKey,
+      actionType: event.actionType, delta: event.amount, payType: event.payType || null, createdAt: event.createdAt,
+      cloudSynced: true, text: `Cloud同期: ${event.actionType} ${event.amount > 0 ? "+" : ""}${event.amount}`,
+      type: "cloudRewardSync", date: new Date(event.createdAt).toLocaleString("ja-JP") });
+    profile.history = profile.history.slice(0, 40);
+    profile.updatedAt = now;
+    next.profiles[event.localChildKey] = profile;
+    next.updatedAt = now;
+    core.validateStore(next);
+    writeRawWithRollback(storage, V2_KEY, JSON.stringify(next));
+    return { applied: true, alreadyApplied: false, active: next.activeLocalChildKey === event.localChildKey };
+  }
+
   return Object.freeze({
     V1_KEY, V2_KEY, ACTIVATION_KEY, DEVICE_SETTINGS_KEY, PROFILE_FIELDS,
     isActivatedStore, hasActivationMarker, load, save, saveActive, activate,
-    listProfiles, switchActive, resolveRewardChild,
+    listProfiles, switchActive, resolveRewardChild, applyRewardEvent,
   });
 });

@@ -4,159 +4,91 @@ const fs = require("node:fs");
 const path = require("node:path");
 const core = require("../src/online-rewards-core.js");
 
-const mapping = { supabaseChildId: "child-c", householdId: "house-a" };
-const session = { user: { id: "parent-a" } };
+const identity = { localChildKey: "local-a", supabaseChildId: "11111111-1111-4111-8111-111111111111", householdId: "house-a" };
+const uuid = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const now = () => new Date("2026-11-10T00:00:00.000Z");
 
-function ready(overrides = {}) {
-  return {
-    mapping,
-    session,
-    networkAvailable: true,
-    householdValid: true,
-    childVisible: true,
-    syncStateLoaded: true,
-    syncState: { app_id: "hapichike", initial_import_completed_at: "2026-10-31T00:00:00.000Z" },
-    ...overrides,
-  };
-}
-
-test("mappingなしとinitial import未完了はlocal-only", () => {
-  assert.equal(core.evaluateCloudReady(ready({ mapping: null })).mode, "local");
-  assert.equal(core.evaluateCloudReady(ready({ syncState: null })).mode, "local");
-  assert.equal(core.evaluateCloudReady(ready({ syncState: { app_id: "hapichike", initial_import_completed_at: null } })).mode, "local");
+test("reward eventはv2 identity・eventId・action・amount・createdAtを保持", () => {
+  const event = core.createRewardEvent({ ...identity, actionType: "ticket", amount: 1, operationKey: "ticket", eventId: uuid }, { now });
+  assert.deepEqual(event, { eventId: uuid, ...identity, actionType: "ticket", amount: 1, payType: null,
+    source: "hapichike_ui", operationKey: "ticket", createdAt: "2026-11-10T00:00:00.000Z", status: "cloud_pending" });
 });
 
-test("Cloud-ready TicketはRPCを1回実行してからserver balanceを再取得する", async () => {
-  const calls = [];
-  const result = await core.executeRewardMutation({ type: "ticket", amount: 1, source: "task_completion" }, {
-    resolveMode: async () => {
-      calls.push("readiness");
-      return { mode: "cloud", reason: "ready", childId: "child-c" };
-    },
-    callRpc: async event => {
-      calls.push(`rpc:${event.child_id}:${event.amount}`);
-      return { tickets: 4 };
-    },
-    getChildBalances: async childId => {
-      calls.push(`balance:${childId}`);
-      return { tickets: 4, star_coins: 1, sweets_pay: 0, toy_pay: 0, game_pay: 0, happy_chance_cards: 0 };
-    },
-  });
-  assert.deepEqual(calls, ["readiness", "rpc:child-c:1", "balance:child-c"]);
-  assert.equal(result.mode, "cloud");
-  assert.equal(result.balance.tickets, 4);
+test("ticket/star/exchange/PAY/happy chanceを検証する", () => {
+  for (const input of [
+    { actionType: "ticket", amount: 1 }, { actionType: "star_coin", amount: -1 },
+    { actionType: "star_exchange", amount: 1 }, { actionType: "pay", payType: "sweets", amount: 1 },
+    { actionType: "happy_chance", amount: -1 },
+  ]) assert.doesNotThrow(() => core.createRewardEvent({ ...identity, ...input, eventId: uuid }, { now }));
+  assert.throws(() => core.createRewardEvent({ ...identity, actionType: "pay", payType: "snack", amount: 1, eventId: uuid }), /PAY/);
 });
 
-test("Ticket二重操作はaction lock中のRPCを1回だけ実行する", async () => {
-  let releaseRpc;
-  let rpcCalls = 0;
-  const dependencies = {
-    resolveMode: async () => ({ mode: "cloud", reason: "ready", childId: "child-c" }),
-    callRpc: async () => {
-      rpcCalls += 1;
-      await new Promise(resolve => { releaseRpc = resolve; });
-    },
-    getChildBalances: async () => ({
-      tickets: 4, star_coins: 1, sweets_pay: 0, toy_pay: 0, game_pay: 0, happy_chance_cards: 0,
-    }),
-  };
-  const first = core.withActionLock("parent-ticket-gift", () => core.executeRewardMutation({ type: "ticket", amount: 1 }, dependencies));
-  await new Promise(resolve => setImmediate(resolve));
-  const second = await core.withActionLock("parent-ticket-gift", () => core.executeRewardMutation({ type: "ticket", amount: 1 }, dependencies));
-  assert.deepEqual(second, { duplicate: true });
-  assert.equal(rpcCalls, 1);
-  releaseRpc();
-  await first;
+test("eventIdはUUID v4だけを許可する", () => {
+  assert.equal(core.isUuidV4(uuid), true);
+  assert.throws(() => core.createRewardEvent({ ...identity, actionType: "ticket", amount: 1, eventId: "bad" }), /UUID v4/);
 });
 
-test("Ticket RPC失敗時はserver balanceを読まずlocal stateを変更しない", async () => {
-  const state = { coins: 3 };
-  let balanceReads = 0;
-  await assert.rejects(() => core.executeRewardMutation({ type: "ticket", amount: 1 }, {
-    resolveMode: async () => ({ mode: "cloud", reason: "ready", childId: "child-c" }),
-    callRpc: async () => { throw new Error("rpc failed"); },
-    getChildBalances: async () => { balanceReads += 1; },
-  }), /rpc failed/);
-  assert.equal(state.coins, 3);
-  assert.equal(balanceReads, 0);
+test("pending event stateを検証してround tripする", () => {
+  const event = core.createRewardEvent({ ...identity, actionType: "ticket", amount: 1, eventId: uuid }, { now });
+  const document = core.upsertEvent(core.emptyEventDocument(), event);
+  assert.deepEqual(core.parseEventDocument(JSON.stringify(document)), document);
+  assert.deepEqual(core.removeEvent(document, uuid), core.emptyEventDocument());
 });
 
-test("TicketはRPC成功後のserver balance再取得失敗を成功扱いにしない", async () => {
-  const state = { coins: 3 };
-  await assert.rejects(() => core.executeRewardMutation({ type: "ticket", amount: 1 }, {
-    resolveMode: async () => ({ mode: "cloud", reason: "ready", childId: "child-c" }),
-    callRpc: async () => ({ tickets: 4 }),
-    getChildBalances: async () => { throw new Error("refresh failed"); },
-  }), /refresh failed/);
-  assert.equal(state.coins, 3);
+test("同じ操作のretryは同じeventIdを再利用する", () => {
+  const input = { ...identity, actionType: "ticket", amount: 1 };
+  const event = core.createRewardEvent({ ...input, operationKey: "task:a", eventId: uuid }, { now });
+  assert.equal(core.findRetryEvent(core.upsertEvent(core.emptyEventDocument(), event), "task:a", input).eventId, uuid);
 });
 
-test("mapping済みTicketのCloud-ready判定失敗はlocal fallbackしない", async () => {
-  await assert.rejects(() => core.executeRewardMutation({ type: "ticket", amount: 1 }, {
-    resolveMode: async () => ({ mode: "local", reason: "initial_import_incomplete" }),
-  }), /cloud readiness/);
+test("mapping変更後の古いpending eventはstaleとして拒否する", () => {
+  const event = core.createRewardEvent({ ...identity, actionType: "ticket", amount: 1, operationKey: "task:a", eventId: uuid }, { now });
+  const document = core.upsertEvent(core.emptyEventDocument(), event);
+  assert.throws(() => core.findRetryEvent(document, "task:a", { ...identity, supabaseChildId: "child-c", actionType: "ticket", amount: 1 }), /STALE/);
 });
 
-test("mappingなしlegacy ChildのTicketはlocal-onlyを維持", async () => {
-  const result = await core.executeRewardMutation({ type: "ticket", amount: 1 }, {
-    resolveMode: async () => ({ mode: "local", reason: "mapping_missing" }),
-  });
-  assert.deepEqual(result, { mode: "local", reason: "mapping_missing" });
+test("cloud success後はlocal_pendingとして保存できる", () => {
+  const event = core.createRewardEvent({ ...identity, actionType: "ticket", amount: 1, eventId: uuid }, { now });
+  const document = core.upsertEvent(core.emptyEventDocument(), { ...event, status: "local_pending" });
+  assert.equal(core.parseEventDocument(JSON.stringify(document)).events[0].status, "local_pending");
 });
 
-test("Cloud-readyはlogin・household・mapping・hapichike import完了を要求", () => {
-  assert.deepEqual(core.evaluateCloudReady(ready()), { mode: "cloud", reason: "ready", childId: "child-c" });
-  assert.equal(core.evaluateCloudReady(ready({ session: null })).reason, "session_missing");
-  assert.equal(core.evaluateCloudReady(ready({ networkAvailable: false })).reason, "offline");
-  assert.equal(core.evaluateCloudReady(ready({ householdValid: false })).reason, "household_invalid");
-  assert.equal(core.evaluateCloudReady(ready({ childVisible: false })).reason, "mapping_invalid");
-  assert.equal(core.evaluateCloudReady(ready({ syncState: { app_id: "other", initial_import_completed_at: "x" } })).mode, "local");
+test("RPC resultのchild_id不一致はLocal反映前に拒否する", () => {
+  assert.equal(core.assertRpcResultChild({ child_id: identity.supabaseChildId }, identity.supabaseChildId).child_id, identity.supabaseChildId);
+  assert.throws(() => core.assertRpcResultChild({ child_id: "child-c" }, identity.supabaseChildId), /RPC_CHILD_MISMATCH/);
 });
 
-test("ticket/star/PAY/happy eventに意味情報を保持", () => {
-  const now = () => new Date("2026-11-01T00:00:00.000Z");
-  for (const event of [
-    { type: "ticket", amount: 1 },
-    { type: "star_coin", amount: -1 },
-    { type: "star_exchange", amount: 1 },
-    { type: "pay", category: "sweets", amount: 1 },
-    { type: "happy_chance", amount: -1 },
-  ]) {
-    const actual = core.createRewardEvent({ ...event, child_id: "child-c", source: "test" }, now);
-    assert.equal(actual.child_id, "child-c");
-    assert.equal(actual.source, "test");
-    assert.equal(actual.created_at, "2026-11-01T00:00:00.000Z");
-  }
-  assert.throws(() => core.createRewardEvent({ type: "pay", category: "snack", amount: 1, child_id: "c" }), /category/);
-});
-
-test("server resultを既存localStorage schemaの6残高へ反映", () => {
-  const state = { coins: 99, starCoins: 99, happyChanceCards: 99, points: { snack: 99, toy: 99, game: 99 }, tasks: [1] };
-  core.applyServerBalance(state, {
-    tickets: 4, star_coins: 2, sweets_pay: 1, toy_pay: 3, game_pay: 5, happy_chance_cards: 1,
-  });
-  assert.deepEqual(state, { coins: 4, starCoins: 2, happyChanceCards: 1, points: { snack: 1, toy: 3, game: 5 }, tasks: [1] });
-});
-
-test("同じactionの並列送信を拒否し、失敗後は再操作可能", async () => {
+test("同じactionの並列送信を拒否し失敗後はretry可能", async () => {
   let release;
-  const pending = core.withActionLock("ticket", () => new Promise(resolve => { release = resolve; }));
+  const first = core.withActionLock("ticket", () => new Promise(resolve => { release = resolve; }));
   assert.deepEqual(await core.withActionLock("ticket", async () => "second"), { duplicate: true });
   release("first");
-  assert.equal(await pending, "first");
+  assert.equal(await first, "first");
   await assert.rejects(() => core.withActionLock("ticket", async () => { throw new Error("rpc failed"); }), /rpc failed/);
   assert.equal(await core.withActionLock("ticket", async () => "retry"), "retry");
 });
 
-test("browser bridgeは005 wrapperのみを使い直接table更新しない", () => {
+test("browser bridgeはactive v2 resolverと005 RPC wrapperだけを使う", () => {
   const source = fs.readFileSync(path.join(__dirname, "../src/online-rewards.js"), "utf8");
-  for (const name of ["addTicket", "addStarCoin", "exchangeStarCoinsForTicket", "adjustPayBalance", "adjustHappyChance"]) {
-    assert.match(source, new RegExp(`\\b${name}\\b`));
-  }
-  assert.doesNotMatch(source, /from\(["']child_balances["']\).*update|from\(["']reward_logs["']\).*insert/s);
+  assert.match(source, /resolveRewardChild\(localStorage\)/);
+  for (const name of ["addTicket", "addStarCoin", "exchangeStarCoinsForTicket", "adjustPayBalance", "adjustHappyChance"]) assert.match(source, new RegExp(`\\b${name}\\b`));
+  assert.doesNotMatch(source, /cloudMapping\.v1|LOCAL_CHILD_KEY|parentViewedSupabaseChildId/);
 });
 
-test("initial import実装は変更せず通常同期と別系統", () => {
+test("Cloud成功後はserver全残高上書きせずevent deltaをLocalへ適用する", () => {
   const source = fs.readFileSync(path.join(__dirname, "../src/online-rewards.js"), "utf8");
-  assert.doesNotMatch(source, /importInitialHapichikeSnapshot|pendingInitialImport|source_snapshot_hash/);
+  assert.match(source, /applyRewardEvent/);
+  assert.doesNotMatch(source, /applyServerBalance|getChildBalances/);
+});
+
+test("idempotency migrationはevent_id primary keyと既存RPC overloadを持つ", () => {
+  const sql = fs.readFileSync(path.join(__dirname, "../supabase/migrations/202611100007_reward_event_idempotency.sql"), "utf8");
+  assert.match(sql, /event_id uuid primary key/);
+  assert.match(sql, /on conflict \(event_id\) do nothing/);
+  for (const name of ["add_ticket", "add_star_coin", "exchange_star_coins_for_ticket", "adjust_pay_balance", "adjust_happy_chance"]) assert.match(sql, new RegExp(`create function public\\.${name}`));
+});
+
+test("initial import・legacy migration・service roleへ接続しない", () => {
+  const source = fs.readFileSync(path.join(__dirname, "../src/online-rewards.js"), "utf8");
+  assert.doesNotMatch(source, /importInitialHapichikeSnapshot|identityMigration|service.?role/i);
 });

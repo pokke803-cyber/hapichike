@@ -24,55 +24,60 @@ function normalizeLogOptions(options) {
 
 const rewardRpc = (name, args) => unwrap(requireSupabase().rpc(name, args));
 
-export function addTicket(childId, amount, options = null) {
+export function addTicket(childId, amount, eventId, options = null) {
   const { title, message, metadata } = normalizeLogOptions(options);
   return rewardRpc("add_ticket", {
     p_child_id: childId,
     p_amount: amount,
+    p_event_id: eventId,
     p_title: title,
     p_message: message,
     p_metadata: metadata,
   });
 }
 
-export function addStarCoin(childId, amount, options = null) {
+export function addStarCoin(childId, amount, eventId, options = null) {
   const { title, message, metadata } = normalizeLogOptions(options);
   return rewardRpc("add_star_coin", {
     p_child_id: childId,
     p_amount: amount,
+    p_event_id: eventId,
     p_title: title,
     p_message: message,
     p_metadata: metadata,
   });
 }
 
-export function exchangeStarCoinsForTicket(childId, options = null) {
+export function exchangeStarCoinsForTicket(childId, eventId, options = null) {
   const { title, message, metadata } = normalizeLogOptions(options);
   return rewardRpc("exchange_star_coins_for_ticket", {
     p_child_id: childId,
+    p_event_id: eventId,
     p_title: title,
     p_message: message,
     p_metadata: metadata,
   });
 }
 
-export function adjustPayBalance(childId, payType, amount, options = null) {
+export function adjustPayBalance(childId, payType, amount, eventId, options = null) {
   const { title, message, metadata } = normalizeLogOptions(options);
   return rewardRpc("adjust_pay_balance", {
     p_child_id: childId,
     p_pay_type: payType,
     p_amount: amount,
+    p_event_id: eventId,
     p_title: title,
     p_message: message,
     p_metadata: metadata,
   });
 }
 
-export function adjustHappyChance(childId, amount, options = null) {
+export function adjustHappyChance(childId, amount, eventId, options = null) {
   const { title, message, metadata } = normalizeLogOptions(options);
   return rewardRpc("adjust_happy_chance", {
     p_child_id: childId,
     p_amount: amount,
+    p_event_id: eventId,
     p_title: title,
     p_message: message,
     p_metadata: metadata,

@@ -17,6 +17,7 @@ Supabase設定はVite環境変数 `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KE
 | `kidsVegasCasino.v2.activation` | v2が有効化済みであることを示すfail-closed marker | 値は `active`。v2不正時にv1へfallbackしないために使用 |
 | `kidsVegasCasino.deviceSettings.v1` | BGM/SFX等の端末設定 | Child profileへ混ぜない |
 | `kidsVegasCasino.cloudMapping.v2` | localChildKeyとSupabase child_idの親確認済み1対1mapping | backup/restore対象外 |
+| `kidsVegasCasino.rewardSync.v1` | 未完了reward eventのeventId・固定Child identity・Cloud/Local適用状態 | secretなし。restoreでCloudへ自動再送しない |
 
 主キーの詳細と保存フィールドは `DATA_STRUCTURE.md` を参照してください。
 
