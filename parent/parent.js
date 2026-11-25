@@ -37,6 +37,9 @@ const elements = Object.fromEntries([
   "migrationApprovals", "migrationApplyButton", "migrationActionMessage", "mappingPreviewMessage", "mappingPreviewButton",
   "mappingPreviewResult", "mappingApproval", "mappingSaveButton", "mappingActionMessage", "importPreviewButton", "importPreviewResult", "importApprovals",
   "importExecuteButton", "importActionMessage",
+  "initialSaveStatusBadge", "dataSelectedChildName", "localSaveState", "cloudSaveState", "dataOverviewMessage",
+  "startInitialSaveButton", "initialSaveWizard", "closeInitialSaveButton", "wizardProgress", "wizardBackButton", "wizardNextButton",
+  "step1Message", "backupFileConfirmed", "importResultPanel", "importResultTitle", "importResultDetails", "verifyImportResultButton",
   "showChildCreateButton", "childCreateForm", "childNameInput", "childNicknameInput", "childPreviewButton",
   "cancelChildCreateButton", "childCreatePreview", "childPreviewHousehold", "childPreviewName", "childPreviewNickname",
   "createChildButton", "childCreateMessage",
@@ -67,6 +70,10 @@ let mappingPreviewPhase = "idle";
 let childCreatePreview = null;
 let creatingChild = false;
 let activeDashboardTab = "home";
+let initialSaveStep = 1;
+let initialSaveOpen = false;
+let initialSaveContext = "";
+let importResult = null;
 
 function setActiveDashboardTab(tabName) {
   activeDashboardTab = ["home", "data", "settings"].includes(tabName) ? tabName : "home";
@@ -187,6 +194,106 @@ function resetActionPreviews() {
   elements.importPreviewResult.textContent = "readinessとmappingを確認してください。";
 }
 
+function resetInitialSaveGuide({ close = false } = {}) {
+  initialSaveStep = 1;
+  if (close) initialSaveOpen = false;
+  importResult = null;
+  resetActionPreviews();
+  elements.backupFileConfirmed.checked = false;
+  elements.backupFileConfirmed.disabled = true;
+  elements.step1Message.textContent = "";
+  elements.importResultPanel.className = "result-panel";
+  elements.importResultTitle.textContent = "結果を確認しています";
+  elements.importResultDetails.textContent = "";
+}
+
+function balancesMatchCloud(expected, cloud) {
+  return Boolean(expected && cloud) && globalThis.HapichikeInitialImport.BALANCE_KEYS
+    .every(key => Number.isFinite(Number(cloud[key])) && Number(cloud[key]) === expected[key]);
+}
+
+function evaluateImportResult(state, expected) {
+  if (state.viewedChildData.status !== "ready" || !state.viewedChildBalance) {
+    return { status: "unknown", title: "通信結果を確認できません", details: "自動再送はしません。クラウド状態を再確認してください。" };
+  }
+  if (!state.viewedChildSyncState?.initial_import_completed_at) {
+    return { status: "unknown", title: "初回保存の完了記録を確認できません", details: "確認前の再送は禁止しています。クラウド状態を再確認してください。" };
+  }
+  if (!expected) {
+    return { status: "success", title: "初回保存済みです", details: "クラウドに初回保存の完了記録があります。保存対象は6種類の残高だけです。" };
+  }
+  if (balancesMatchCloud(expected, state.viewedChildBalance)) {
+    return { status: "success", title: "6種類の残高を確認しました", details: "送信値とクラウドから再取得した値が一致しました。" };
+  }
+  return { status: "mismatch", title: "送信値とクラウドの値が一致しません", details: "再送せず、クラウドの最新状態と報酬履歴を確認してください。" };
+}
+
+function renderInitialSaveGuide(model, state, comparison) {
+  const readiness = model.initialImport.readiness;
+  const context = `${state.selectedHouseholdId || ""}:${state.parentViewedSupabaseChildId || ""}`;
+  if (initialSaveContext && initialSaveContext !== context) resetInitialSaveGuide({ close: true });
+  initialSaveContext = context;
+  const storedPending = globalThis.HapichikeInitialImport.readPendingPreview(window.localStorage);
+  const pending = storedPending?.child_id === state.parentViewedSupabaseChildId ? storedPending : null;
+  const complete = readiness.importComplete;
+  const exactMapping = model.mapping.status === "valid" && model.mapping.viewedChildMatches
+    && model.mapping.item?.localChildKey === selectedLocalChildKey;
+  const cloudKnown = state.viewedChildData.status === "ready" && comparison.length === 6
+    && comparison.every(row => row.cloud !== null);
+  const mappingMismatch = model.mapping.status === "valid" && (!model.mapping.viewedChildMatches
+    || model.mapping.item?.localChildKey !== selectedLocalChildKey);
+  const stepReady = {
+    1: Boolean(selectedLocalChildKey && cloudKnown && !mappingMismatch),
+    2: selectedBackupCurrent() && elements.backupFileConfirmed.checked,
+    3: exactMapping,
+    4: complete || importResult?.status === "success" || importResult?.status === "mismatch" || importResult?.status === "unknown",
+  };
+
+  elements.dataSelectedChildName.textContent = model.selectedChild?.displayName ?? "未選択";
+  elements.localSaveState.textContent = selectedLocalChildKey ? "読み取り済み" : "子どもを選択してください";
+  elements.cloudSaveState.textContent = state.viewedChildData.status === "ready" ? "取得済み" : state.viewedChildData.status === "error" ? "取得失敗" : "確認中";
+  elements.initialSaveStatusBadge.className = "status-pill";
+  if (complete) {
+    elements.initialSaveStatusBadge.textContent = "初回保存済み";
+    elements.initialSaveStatusBadge.classList.add("is-complete");
+    elements.dataOverviewMessage.textContent = "6種類の残高の初回保存記録があります。タスクや履歴などの完全同期ではありません。";
+    elements.startInitialSaveButton.textContent = "保存結果を確認";
+  } else if (pending || importResult?.status === "unknown" || state.viewedChildData.status === "error" || readiness.cloudInitialized) {
+    elements.initialSaveStatusBadge.textContent = "要確認";
+    elements.initialSaveStatusBadge.classList.add("is-warning");
+    elements.dataOverviewMessage.textContent = pending ? "保留中の初回保存情報があります。再送せず、クラウド状態を確認してください。" : "原因と対処を初回保存ガイドで確認してください。";
+    elements.startInitialSaveButton.textContent = "状態を確認";
+  } else {
+    elements.initialSaveStatusBadge.textContent = "未完了";
+    elements.dataOverviewMessage.textContent = "ガイドに沿ってバックアップ、子どもの紐付け、6残高の保存を行います。";
+    elements.startInitialSaveButton.textContent = "初回保存をはじめる";
+  }
+
+  elements.initialSaveWizard.hidden = !initialSaveOpen;
+  document.querySelectorAll("[data-wizard-step]").forEach(step => { step.hidden = Number(step.dataset.wizardStep) !== initialSaveStep; });
+  document.querySelectorAll("[data-wizard-progress]").forEach(item => {
+    const step = Number(item.dataset.wizardProgress);
+    item.classList.toggle("is-active", step === initialSaveStep);
+    item.classList.toggle("is-complete", step < initialSaveStep || (step === 5 && complete));
+  });
+  elements.wizardBackButton.hidden = initialSaveStep === 1;
+  elements.wizardNextButton.hidden = initialSaveStep === 5;
+  elements.wizardNextButton.disabled = !stepReady[initialSaveStep];
+  elements.wizardNextButton.textContent = initialSaveStep === 4 ? "結果を確認" : "次へ";
+  elements.step1Message.textContent = !selectedLocalChildKey ? "この端末の子どもを選択してください。"
+    : !cloudKnown ? "クラウドの6残高を取得できていません。0として扱わず、ホームから再取得してください。"
+      : mappingMismatch ? "選択した子どもと既存の紐付けが一致しません。正しい子どもを選び直してください。" : "この端末とクラウドの6残高を確認できます。";
+  elements.step1Message.classList.toggle("is-success", stepReady[1]);
+
+  if (complete && !importResult) importResult = evaluateImportResult(state, null);
+  if (importResult) {
+    elements.importResultPanel.className = `result-panel is-${importResult.status}`;
+    elements.importResultTitle.textContent = importResult.title;
+    elements.importResultDetails.textContent = importResult.details;
+  }
+  elements.verifyImportResultButton.hidden = importResult?.status === "success";
+}
+
 function resetProfileCreationPreview() {
   profileCreationPreview = null;
   elements.profileCreationApproval.checked = false;
@@ -215,9 +322,11 @@ function renderActionButtons(model) {
   elements.migrationApplyButton.disabled = elements.migrationApprovals.disabled || !migrationChecks.every(input => input.checked);
   elements.mappingSaveButton.disabled = !mappingPreview || !elements.mappingApproval.checked;
   const approvals = Object.fromEntries([...elements.importApprovals.querySelectorAll("input")].map(input => [input.dataset.importApproval, input.checked]));
-  elements.importExecuteButton.disabled = !globalThis.HapichikeParentCloudActions.canExecuteImport({
+  elements.importExecuteButton.disabled = Boolean(importResult) || !globalThis.HapichikeParentCloudActions.canExecuteImport({
     readiness: model.initialImport.readiness, approvals, importing, preview: initialImportPreview,
-    childId: model.selectedChild?.id, mappingValid: model.mapping.status === "valid" && model.mapping.viewedChildMatches,
+    childId: model.selectedChild?.id, mappingValid: model.mapping.status === "valid" && model.mapping.viewedChildMatches
+      && model.mapping.item?.localChildKey === selectedLocalChildKey
+      && initialImportPreview?.metadata?.local_child_key === selectedLocalChildKey,
   });
 }
 
@@ -231,22 +340,22 @@ function renderCloudManagement(state) {
   if (selectedLocalChildKey && !profiles.some(profile => profile.localChildKey === selectedLocalChildKey)) selectedLocalChildKey = "";
   if (!selectedLocalChildKey) selectedLocalChildKey = profiles.find(profile => profile.active)?.localChildKey
     ?? profiles.find(profile => profile.kind === "legacy")?.localChildKey ?? "";
-  const profileOptions = [Object.assign(document.createElement("option"), { value: "", textContent: "Local profileを明示選択" })];
+  const profileOptions = [Object.assign(document.createElement("option"), { value: "", textContent: "この端末の子どもを選択" })];
   profiles.forEach(profile => {
     const option = document.createElement("option");
     option.value = profile.localChildKey;
-    option.textContent = `${profile.displayName}（${profile.kind} / ${profile.localChildKey}）`;
+    option.textContent = `${profile.displayName}（${profile.kind === "v2" ? "子ども別" : "旧データ"}）`;
     option.selected = profile.localChildKey === selectedLocalChildKey;
     profileOptions.push(option);
   });
   elements.localProfileSelect.replaceChildren(...profileOptions);
-  elements.cloudIdentityName.textContent = `${model.selectedChild?.displayName ?? "未選択"} / ${model.selectedChild?.id ?? "--"}`;
-  elements.identityMappingState.textContent = map.viewedChildMatches ? `Connected: ${map.item.localChildKey}` : "Not connected";
+  elements.cloudIdentityName.textContent = model.selectedChild?.displayName ?? "未選択";
+  elements.identityMappingState.textContent = map.viewedChildMatches && map.item?.localChildKey === selectedLocalChildKey ? "紐付け済み" : map.status === "valid" ? "選択と不一致" : "未完了";
   elements.localIdentitySummary.textContent = `Legacy v1: ${statusLabel(state.local.legacyStatus)} / v2: ${statusLabel(state.local.v2Status)} / v2 profile: ${state.local.profileCount}件 / active key: ${state.local.activeLocalChildExists ? "あり" : "なし"}`;
-  elements.mappingSummary.textContent = `${({ valid: "mappingあり（valid）", stale: "mappingあり（stale）", missing: "mappingなし", invalid: "mapping invalid" })[map.status]} / ${map.version === 2 ? "v2" : "legacy v1 compatibility"}`;
+  elements.mappingSummary.textContent = `${({ valid: "子どもの紐付けあり", stale: "古い紐付けの確認が必要", missing: "子どもの紐付けなし", invalid: "紐付け情報を確認できません" })[map.status]}`;
   elements.mappingDetails.textContent = map.item
-    ? `localChildKey: ${map.item.localChildKey} / mapped Supabase Child: ${map.item.supabaseChildId} / household: ${map.householdMatches ? "一致" : "不一致"}。${map.viewedChildMatches ? "このLocal profileは現在表示中のChildに対応しています" : "現在表示中のChildとは対応していません"}`
-    : "比較対象のLocal profileが未確定です。Local profileの所有者が未確定です。";
+    ? `${map.viewedChildMatches && map.item.localChildKey === selectedLocalChildKey ? "選択中の組み合わせは確認済みです。" : "現在の選択と保存済みの紐付けが一致しません。"}`
+    : "この端末の子どもとクラウドの子どもの組み合わせを保護者が確認してください。";
   let comparison = model.comparison;
   let comparisonSource = model.localProfile.source;
   if (selectedLocalChildKey) {
@@ -257,10 +366,10 @@ function renderCloudManagement(state) {
   }
   const comparisonMismatch = comparison.some(row => row.difference !== null && row.difference !== 0);
   elements.comparisonMessage.textContent = comparison.length
-    ? `${comparisonSource} と表示中Cloud Childをread-only比較しています。${comparisonMismatch ? "ローカルとクラウドの残高が一致していません" : "6残高は一致しています"}`
-    : "比較対象のLocal profileを明示選択してください。名前だけでは対応付けません。";
-  elements.localSourceMeta.textContent = `この端末のlocalStorage / 取得 ${state.local.readAt ? formatDateTime(state.local.readAt) : "--"}`;
-  elements.cloudSourceMeta.textContent = `Supabase / 取得 ${state.viewedChildData.fetchedAt ? formatDateTime(state.viewedChildData.fetchedAt) : "--"}`;
+    ? `${comparisonSource} とクラウドの子どもを比較しています。${comparisonMismatch ? "6残高に差があります。内容を確認してください。" : "6残高は一致しています。"}`
+    : "この端末の子どもを選択してください。名前だけでは紐付けません。";
+  elements.localSourceMeta.textContent = `取得 ${state.local.readAt ? formatDateTime(state.local.readAt) : "--"}`;
+  elements.cloudSourceMeta.textContent = `取得 ${state.viewedChildData.fetchedAt ? formatDateTime(state.viewedChildData.fetchedAt) : "--"}`;
   elements.comparisonBody.replaceChildren(...comparison.map(row => {
     const tr = document.createElement("tr");
     [row.label, valueLabel(row.local), valueLabel(row.cloud), row.difference === null ? "--" : `${row.difference > 0 ? "+" : ""}${row.difference}`].forEach(value => { const td = document.createElement("td"); td.textContent = value; tr.append(td); });
@@ -269,10 +378,10 @@ function renderCloudManagement(state) {
   const sync = model.initialImport.syncState;
   const readiness = model.initialImport.readiness;
   elements.importSummary.textContent = sync?.initial_import_completed_at
-    ? "初回import済み（6残高snapshotのみ）"
-    : readiness.cloudInitialized ? "確認が必要（Cloudに既存データあり）" : readiness.ready ? "未完了（実行条件を確認できます）" : "未完了（準備が必要）";
-  elements.importDetails.textContent = `初回import記録: ${sync ? "あり" : "なし"} / 完了日時: ${sync?.initial_import_completed_at ? formatDateTime(sync.initial_import_completed_at) : "なし"} / Cloud既存データ: ${readiness.cloudInitialized ? "あり" : "なし"} / 実行可能: ${readiness.ready ? "はい" : "いいえ"}。タスク・全履歴は同期対象外です。`;
-  elements.backupSummary.textContent = model.backup.present ? `backupあり / ${selectedBackupCurrent() ? "選択中Localのcurrent snapshotと一致" : "選択中Localに対してoutdated"}` : "backupなし";
+    ? "クラウドへの初回保存済み（6残高のみ）"
+    : readiness.cloudInitialized ? "要確認（クラウドに既存データがあります）" : readiness.ready ? "未完了（保存内容を確認できます）" : "未完了（準備が必要です）";
+  elements.importDetails.textContent = `初回保存記録: ${sync ? "あり" : "なし"} / 完了日時: ${sync?.initial_import_completed_at ? formatDateTime(sync.initial_import_completed_at) : "なし"} / クラウド既存データ: ${readiness.cloudInitialized ? "あり" : "なし"} / 実行可能: ${readiness.ready ? "はい" : "いいえ"}。タスク・全履歴は保存対象外です。`;
+  elements.backupSummary.textContent = model.backup.present ? `バックアップあり / ${selectedBackupCurrent() ? "現在の6残高と一致" : "現在の6残高とは不一致"}` : "バックアップなし";
   elements.backupDetails.textContent = model.backup.metadata?.backup_created_at
     ? `created_at: ${new Date(model.backup.metadata.backup_created_at).toLocaleString("ja-JP")}` : "created_at: --";
   elements.diagnosticGrid.replaceChildren(...Object.entries(model.diagnostic).map(([key, value]) => { const div = document.createElement("div"); const dt = document.createElement("dt"); const dd = document.createElement("dd"); dt.textContent = key; dd.textContent = statusLabel(value); div.append(dt, dd); return div; }));
@@ -280,6 +389,7 @@ function renderCloudManagement(state) {
   renderMigrationPreview();
   renderMappingPreview();
   renderActionButtons(model);
+  renderInitialSaveGuide(model, state, comparison);
 }
 
 function shortId(value) {
@@ -762,6 +872,37 @@ function downloadBackup(envelope) {
 elements.localProfileSelect.addEventListener("change", () => {
   selectedLocalChildKey = elements.localProfileSelect.value;
   resetActionPreviews();
+  initialSaveStep = 1;
+  importResult = null;
+  elements.backupFileConfirmed.checked = false;
+  elements.backupFileConfirmed.disabled = true;
+  renderCloudManagement(runtime.getState());
+});
+
+elements.startInitialSaveButton.addEventListener("click", () => {
+  const state = runtime.getState();
+  const model = globalThis.HapichikeParentCloudManagement.inspect(window.localStorage, state);
+  const storedPending = globalThis.HapichikeInitialImport.readPendingPreview(window.localStorage);
+  const pending = storedPending?.child_id === state.parentViewedSupabaseChildId ? storedPending : null;
+  initialSaveOpen = true;
+  initialSaveStep = model.initialImport.readiness.importComplete || pending ? 5 : 1;
+  if (initialSaveStep === 5 && !importResult) {
+    importResult = model.initialImport.readiness.importComplete
+      ? evaluateImportResult(state, pending?.balances ?? null)
+      : { status: "unknown", title: "保留中の保存情報があります", details: "再送せず、クラウドの状態を再確認してください。" };
+  }
+  renderCloudManagement(state);
+});
+elements.closeInitialSaveButton.addEventListener("click", () => {
+  initialSaveOpen = false;
+  renderCloudManagement(runtime.getState());
+});
+elements.wizardBackButton.addEventListener("click", () => {
+  if (initialSaveStep > 1) initialSaveStep -= 1;
+  renderCloudManagement(runtime.getState());
+});
+elements.wizardNextButton.addEventListener("click", () => {
+  if (!elements.wizardNextButton.disabled && initialSaveStep < 5) initialSaveStep += 1;
   renderCloudManagement(runtime.getState());
 });
 
@@ -812,10 +953,13 @@ elements.createBackupButton.addEventListener("click", () => {
   try {
     const result = globalThis.HapichikeParentCloudActions.createBackup(window.localStorage, selectedLocalChildKey);
     downloadBackup(result.envelope);
-    setActionMessage(elements.backupActionMessage, `backupを作成しました（format v${result.envelope.version} / ${result.profile.displayName}）。`, true);
+    elements.backupFileConfirmed.checked = false;
+    elements.backupFileConfirmed.disabled = false;
+    setActionMessage(elements.backupActionMessage, `バックアップのダウンロードを開始しました（形式 v${result.envelope.version} / ${result.profile.displayName}）。保存されたファイルを確認してください。`, true);
     renderCloudManagement(runtime.getState());
   } catch (error) { setActionMessage(elements.backupActionMessage, actionError(error)); }
 });
+elements.backupFileConfirmed.addEventListener("change", () => renderCloudManagement(runtime.getState()));
 
 elements.selectRestoreButton.addEventListener("click", () => elements.restoreFileInput.click());
 elements.restoreFileInput.addEventListener("change", async () => {
@@ -919,11 +1063,21 @@ elements.importPreviewButton.addEventListener("click", async () => {
   const state = runtime.getState();
   const model = globalThis.HapichikeParentCloudManagement.inspect(window.localStorage, state);
   try {
+    const storedPending = globalThis.HapichikeInitialImport.readPendingPreview(window.localStorage);
+    if (storedPending && storedPending.child_id !== state.parentViewedSupabaseChildId) throw new Error("IMPORT_NOT_ALLOWED");
     if (!(model.mapping.status === "valid" && model.mapping.viewedChildMatches && model.mapping.item?.localChildKey === selectedLocalChildKey)) throw new Error("MAPPING_REQUIRED");
     initialImportPreview = await globalThis.HapichikeParentCloudActions.createImportPreview(window.localStorage, {
       localChildKey: selectedLocalChildKey, childId: state.parentViewedSupabaseChildId, readiness: model.initialImport.readiness, parentApproved: true,
     });
-    elements.importPreviewResult.textContent = [`Local profile: ${selectedLocalChildKey}`, `Cloud Child: ${model.selectedChild.displayName}`, `absolute snapshot: ${JSON.stringify(initialImportPreview.balances)}`, `canonical hash: ${initialImportPreview.source_snapshot_hash}`, `backup date: ${initialImportPreview.backup_created_at}`, `import_id: ${initialImportPreview.import_id}`].join("\n");
+    const labels = { tickets: "チケット", star_coins: "スターコイン", sweets_pay: "スイーツPAY", toy_pay: "おもちゃPAY", game_pay: "ゲームPAY", happy_chance_cards: "ハピチャンカード" };
+    elements.importPreviewResult.textContent = [
+      `この端末の子ども: ${localProfiles().find(profile => profile.localChildKey === selectedLocalChildKey)?.displayName ?? "--"}`,
+      `クラウドの子ども: ${model.selectedChild.displayName}`,
+      "送信する6残高:",
+      ...globalThis.HapichikeInitialImport.BALANCE_KEYS.map(key => `  ${labels[key]}: ${initialImportPreview.balances[key]}`),
+      `バックアップ日時: ${formatDateTime(initialImportPreview.backup_created_at)}`,
+      "タスク・今日の項目・全履歴・設定: 保存対象外",
+    ].join("\n");
     elements.importApprovals.disabled = false;
     elements.importApprovals.querySelectorAll("input").forEach(input => { input.checked = false; });
     setActionMessage(elements.importActionMessage, "実行前に4項目を目視確認してください。");
@@ -931,6 +1085,31 @@ elements.importPreviewButton.addEventListener("click", async () => {
   renderCloudManagement(state);
 });
 elements.importApprovals.addEventListener("change", () => renderCloudManagement(runtime.getState()));
+
+async function refreshAndEvaluateImport(expected, { allowConfirmedRetry = false } = {}) {
+  try { await runtime.refreshViewedChildData(); }
+  catch { /* runtime state retains a fail-closed error status */ }
+  const state = runtime.getState();
+  const model = globalThis.HapichikeParentCloudManagement.inspect(window.localStorage, state);
+  if (allowConfirmedRetry && state.viewedChildData.status === "ready"
+    && !state.viewedChildSyncState?.initial_import_completed_at
+    && model.initialImport.readiness.ready) {
+    importResult = null;
+    initialImportPreview = null;
+    initialSaveStep = 4;
+    elements.importApprovals.querySelectorAll("input").forEach(input => { input.checked = false; });
+    elements.importApprovals.disabled = true;
+    setActionMessage(elements.importActionMessage, "クラウドが未保存の状態であることを再確認しました。送信内容と4項目をもう一度確認してください。");
+    return null;
+  }
+  importResult = { ...evaluateImportResult(state, expected), expected };
+  if (state.viewedChildSyncState?.initial_import_completed_at) {
+    globalThis.HapichikeInitialImport.clearPendingPreview(window.localStorage);
+    initialImportPreview = null;
+  }
+  initialSaveStep = 5;
+  return importResult;
+}
 
 async function verifyImportPreflight(state) {
   const { session } = await getParentSession();
@@ -957,20 +1136,40 @@ elements.importExecuteButton.addEventListener("click", async () => {
     const state = runtime.getState();
     const model = globalThis.HapichikeParentCloudManagement.inspect(window.localStorage, state);
     const approvals = Object.fromEntries([...elements.importApprovals.querySelectorAll("input")].map(input => [input.dataset.importApproval, input.checked]));
-    if (!globalThis.HapichikeParentCloudActions.canExecuteImport({ readiness: model.initialImport.readiness, approvals, importing: false, preview: initialImportPreview, childId: state.parentViewedSupabaseChildId, mappingValid: model.mapping.status === "valid" && model.mapping.viewedChildMatches })) throw new Error(model.initialImport.readiness.cloudInitialized ? "CLOUD_INITIALIZED" : "IMPORT_NOT_ALLOWED");
+    if (!globalThis.HapichikeParentCloudActions.canExecuteImport({
+      readiness: model.initialImport.readiness, approvals, importing: false, preview: initialImportPreview,
+      childId: state.parentViewedSupabaseChildId,
+      mappingValid: model.mapping.status === "valid" && model.mapping.viewedChildMatches
+        && model.mapping.item?.localChildKey === selectedLocalChildKey
+        && initialImportPreview?.metadata?.local_child_key === selectedLocalChildKey,
+    })) throw new Error(model.initialImport.readiness.cloudInitialized ? "CLOUD_INITIALIZED" : "IMPORT_NOT_ALLOWED");
+    const submitted = { ...initialImportPreview.balances };
     await importInitialHapichikeSnapshot(initialImportPreview);
-    globalThis.HapichikeInitialImport.clearPendingPreview(window.localStorage);
-    initialImportPreview = null;
-    await runtime.refreshViewedChildData();
-    setActionMessage(elements.importActionMessage, "initial importが完了しました。再importはできません。", true);
+    const verified = await refreshAndEvaluateImport(submitted);
+    if (verified?.status === "success") setActionMessage(elements.importActionMessage, "クラウドから再取得した6残高が送信値と一致しました。", true);
+    else if (verified?.status === "mismatch") setActionMessage(elements.importActionMessage, "保存完了記録はありますが、再取得した6残高が送信値と一致しません。再送しないでください。");
+    else setActionMessage(elements.importActionMessage, "送信後のクラウド状態を確認できませんでした。自動再送はしません。");
   } catch (error) {
-    if (!globalThis.HapichikeParentCloudActions.isRetryableNetworkError(error)) {
+    const submitted = initialImportPreview?.balances ? { ...initialImportPreview.balances } : null;
+    if (globalThis.HapichikeParentCloudActions.isRetryableNetworkError(error)) {
+      await refreshAndEvaluateImport(submitted);
+      if (importResult?.status === "success") setActionMessage(elements.importActionMessage, "通信応答は失敗しましたが、クラウドの完了記録と6残高の一致を確認しました。", true);
+      else setActionMessage(elements.importActionMessage, "通信結果を確認できませんでした。確認前の再送は禁止しています。クラウド状態を再確認してください。");
+    } else {
       globalThis.HapichikeInitialImport.clearPendingPreview(window.localStorage);
       initialImportPreview = null;
+      setActionMessage(elements.importActionMessage, actionError(error));
     }
-    setActionMessage(elements.importActionMessage, actionError(error));
   }
   finally { importing = false; renderCloudManagement(runtime.getState()); }
+});
+
+elements.verifyImportResultButton.addEventListener("click", async () => {
+  elements.verifyImportResultButton.disabled = true;
+  const expected = importResult?.expected ?? globalThis.HapichikeInitialImport.readPendingPreview(window.localStorage)?.balances ?? null;
+  await refreshAndEvaluateImport(expected, { allowConfirmedRetry: true });
+  elements.verifyImportResultButton.disabled = false;
+  renderCloudManagement(runtime.getState());
 });
 
 if (!isSupabaseConfigured()) showOnly(elements.configView);

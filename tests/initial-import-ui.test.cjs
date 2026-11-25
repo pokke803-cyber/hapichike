@@ -73,7 +73,9 @@ test("localStorage主残高keyへ書き込まず、許可されたmetadata helpe
 
 test("親ダッシュボード内にread-onlyクラウド管理がある", () => {
   assert.match(parentIndex, /id="cloudManagement"/);
-  assert.match(parentIndex, /Local \/ Cloud 6残高比較/);
+  assert.match(parentIndex, /この端末のデータ/);
+  assert.match(parentIndex, /クラウドのデータ/);
+  assert.match(parentIndex, /data-wizard-step="1"[\s\S]*6種類の残高/);
   assert.doesNotMatch(parentIndex, /href="\/#parent-cloud"/);
   assert.match(index, /window\.location\.hash === "#parent-cloud"/);
   assert.match(index, /if \(openCloudMappingAfterParentUnlock\) openParentSettings\(\)/);

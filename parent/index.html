@@ -133,87 +133,128 @@
             <div id="dataSelectionEmpty" class="empty-card"><span aria-hidden="true">👆</span><h2>ホームで子どもを選んでください</h2><p>データ管理は、選択した子どもごとに安全確認を行います。</p></div>
             <section id="cloudManagement" class="cloud-management" aria-labelledby="cloudManagementTitle" hidden>
               <div class="section-heading">
-                <div><p class="eyebrow">PARENT CLOUD MANAGEMENT</p><h2 id="cloudManagementTitle">クラウド管理</h2></div>
-                <span class="read-only-badge">親の明示承認が必要</span>
+                <div><p class="eyebrow">データ管理</p><h2 id="cloudManagementTitle">保存状態</h2></div>
+                <span id="initialSaveStatusBadge" class="status-pill">確認中</span>
               </div>
-              <p class="support-text">Cloud ChildとLocal profileは別のIDです。自動対応付け・自動移行・自動上書き・差分加算は行いません。</p>
-              <div class="notice notice-warning"><strong>同期されるのは初回import時の6残高snapshotだけです。</strong><br>タスク、今日の状態、全履歴、設定が同期済みになるわけではありません。</div>
-
-              <article class="management-card identity-card">
-                <h3>Child identity</h3>
-                <div class="identity-grid">
-                  <div><strong>Cloud</strong><p id="cloudIdentityName"></p></div>
-                  <label><strong>Local</strong><select id="localProfileSelect"></select></label>
-                  <div><strong>Mapping</strong><p id="identityMappingState"></p></div>
+              <article class="management-card data-overview">
+                <p class="hero-kicker">選択中の子ども</p>
+                <h3 id="dataSelectedChildName">--</h3>
+                <div class="save-state-grid">
+                  <div><span>この端末のデータ</span><strong id="localSaveState">確認中</strong></div>
+                  <div><span>クラウドのデータ</span><strong id="cloudSaveState">確認中</strong></div>
                 </div>
+                <p id="dataOverviewMessage" class="support-text"></p>
               </article>
+              <div class="notice notice-warning"><strong>初回保存の対象は6種類の残高だけです。</strong><br>タスク、今日の項目、全履歴、設定は完全同期されません。クラウドからこの端末への自動上書きも行いません。</div>
+              <button id="startInitialSaveButton" class="primary-button full-width-button" type="button">初回保存をはじめる</button>
 
-              <article class="management-card comparison-card">
-                <div class="card-heading"><div><h3>Local profile追加</h3><p class="detail-text">表示中のCloud Childを名前の参照元として、残高0・空のChild別状態を新規作成します。Cloudデータはコピーも更新もしません。</p></div><button id="profileCreationPreviewButton" class="secondary-button" type="button">作成preview</button></div>
-                <pre id="profileCreationPreviewResult" class="preview-result">previewはまだ実行されていません。</pre>
-                <label class="approval-line"><input id="profileCreationApproval" type="checkbox" disabled> 表示中Child用の新規Local profileであることと、Cloud write 0を確認しました</label>
-                <button id="profileCreationButton" class="danger-button" type="button" disabled>このChild用のLocal profileを作成</button>
-                <p id="profileCreationMessage" class="action-message" role="status"></p>
-              </article>
+              <section id="initialSaveWizard" class="save-wizard" aria-labelledby="wizardTitle" hidden>
+                <div class="wizard-heading"><div><p class="eyebrow">クラウドへの初回保存</p><h3 id="wizardTitle">5ステップで安全に保存します</h3></div><button id="closeInitialSaveButton" class="text-button" type="button">ガイドを閉じる</button></div>
+                <ol id="wizardProgress" class="wizard-progress" aria-label="初回保存の進行状況">
+                  <li data-wizard-progress="1">1<span>確認</span></li><li data-wizard-progress="2">2<span>バックアップ</span></li><li data-wizard-progress="3">3<span>紐付け</span></li><li data-wizard-progress="4">4<span>保存</span></li><li data-wizard-progress="5">5<span>結果</span></li>
+                </ol>
 
-              <div class="management-grid">
-                <article class="management-card"><h3>Local identity</h3><p id="localIdentitySummary"></p></article>
-                <article class="management-card"><h3>Mapping状態</h3><p id="mappingSummary"></p><p id="mappingDetails" class="detail-text"></p></article>
-                <article class="management-card"><h3>Initial import状態</h3><p id="importSummary"></p><p id="importDetails" class="detail-text"></p></article>
-                <article class="management-card"><h3>Backup状態</h3><p id="backupSummary"></p><p id="backupDetails" class="detail-text"></p></article>
-              </div>
+                <article class="management-card wizard-step" data-wizard-step="1">
+                  <p class="step-label">STEP 1 / 5</p><h3>子どもと保存データの確認</h3>
+                  <p class="detail-text">この端末とクラウドの子ども、6種類の残高を確認します。取得できない値を0として扱いません。</p>
+                  <div class="identity-grid">
+                    <div><strong>クラウドの子ども</strong><p id="cloudIdentityName"></p></div>
+                    <label><strong>この端末の子ども</strong><select id="localProfileSelect"></select></label>
+                    <div><strong>子どもの紐付け</strong><p id="identityMappingState"></p></div>
+                  </div>
+                  <p id="comparisonMessage" class="detail-text"></p>
+                  <div class="source-grid"><p><strong>この端末のデータ</strong><span id="localSourceMeta"></span></p><p><strong>クラウドのデータ</strong><span id="cloudSourceMeta"></span></p></div>
+                  <div class="table-scroll"><table><thead><tr><th>項目</th><th>この端末</th><th>クラウド</th><th>差</th></tr></thead><tbody id="comparisonBody"></tbody></table></div>
+                  <p id="step1Message" class="action-message" role="status"></p>
+                </article>
 
-              <article class="management-card comparison-card">
-                <div class="card-heading"><div><h3>Backup / restore</h3><p class="detail-text">legacy v1、v2 profiles、household shared、active local childを含め、秘密情報を除外します。</p></div><button id="createBackupButton" class="primary-button" type="button">backupを作成</button></div>
-                <div class="backup-inline-actions"><button id="selectRestoreButton" class="secondary-button" type="button">backupを読み込む</button><input id="restoreFileInput" type="file" accept="application/json,.json" hidden></div>
-                <pre id="restorePreviewResult" class="preview-result">復元ファイルはまだ選択されていません。</pre>
-                <label id="restoreApprovalLabel" class="approval-line" hidden><input id="restoreApproval" type="checkbox"> 現在のLocalデータをこのbackupで置き換えることを確認しました</label>
-                <button id="executeRestoreButton" class="danger-button" type="button" hidden disabled>Local restoreを実行</button>
-                <p id="backupActionMessage" class="action-message" role="status"></p>
-              </article>
+                <article class="management-card wizard-step" data-wizard-step="2" hidden>
+                  <p class="step-label">STEP 2 / 5</p><h3>バックアップ</h3>
+                  <p class="detail-text">既存の検証付きバックアップを保存します。ダウンロードしたJSONファイルが端末にあることを確認してください。</p>
+                  <p id="backupSummary"></p><p id="backupDetails" class="detail-text"></p>
+                  <button id="createBackupButton" class="primary-button" type="button">バックアップを作成して保存</button>
+                  <label class="approval-line"><input id="backupFileConfirmed" type="checkbox" disabled> ダウンロードしたバックアップファイルを確認しました</label>
+                  <p id="backupActionMessage" class="action-message" role="status"></p>
+                </article>
 
-              <article class="management-card comparison-card">
-                <h3>Local / Cloud 6残高比較</h3>
-                <p id="comparisonMessage" class="detail-text"></p>
-                <div class="source-grid"><p><strong>Local</strong><span id="localSourceMeta"></span></p><p><strong>Cloud</strong><span id="cloudSourceMeta"></span></p></div>
-                <div class="table-scroll"><table><thead><tr><th>項目</th><th>Local</th><th>Cloud</th><th>差分</th></tr></thead><tbody id="comparisonBody"></tbody></table></div>
-              </article>
+                <article class="management-card wizard-step" data-wizard-step="3" hidden>
+                  <p class="step-label">STEP 3 / 5</p><h3>子どもの紐付け</h3>
+                  <p class="detail-text">正しい組み合わせを保護者が確認します。名前だけでは自動で紐付けません。</p>
+                  <p id="mappingSummary"></p><p id="mappingDetails" class="detail-text"></p>
+                  <div class="card-heading"><p id="mappingPreviewMessage" class="detail-text">この端末とクラウドの子どもを選択してください。</p><button id="mappingPreviewButton" class="secondary-button" type="button">組み合わせを確認</button></div>
+                  <pre id="mappingPreviewResult" class="preview-result">確認はまだ実行されていません。</pre>
+                  <label class="approval-line"><input id="mappingApproval" type="checkbox" disabled> 表示されたこの端末とクラウドの子どもの組み合わせを確認しました</label>
+                  <button id="mappingSaveButton" class="danger-button" type="button" disabled>子どもの紐付けを保存</button>
+                  <p id="mappingActionMessage" class="action-message" role="status"></p>
+                  <p class="detail-text">必要なこの端末のプロフィールがない場合は、下の「詳細設定」から既存の作成機能を利用してください。</p>
+                </article>
 
-              <article class="management-card comparison-card">
-                <div class="card-heading"><div><h3>Legacy → v2 migration</h3><p class="detail-text">この端末の旧データの所有者を、現在表示中のCloud Childとして明示確認します。Cloud writeは0です。</p></div><button id="migrationPreviewButton" class="secondary-button" type="button">previewを表示</button></div>
-                <pre id="migrationPreviewResult" class="preview-result"></pre>
-                <fieldset id="migrationApprovals" class="approval-list" disabled>
-                  <label><input type="checkbox" data-migration-approval="owner"> この旧データが表示中のCloud Childのものです</label>
-                  <label><input type="checkbox" data-migration-approval="backup"> current backupを確認しました</label>
-                  <label><input type="checkbox" data-migration-approval="preview"> previewと競合状態を確認しました</label>
-                  <label><input type="checkbox" data-migration-approval="cloud"> migrationではCloudへ書き込まないことを確認しました</label>
-                </fieldset>
-                <button id="migrationApplyButton" class="danger-button" type="button" disabled>Legacy migrationを実行</button>
-                <p id="migrationActionMessage" class="action-message" role="status"></p>
-              </article>
+                <article class="management-card wizard-step" data-wizard-step="4" hidden>
+                  <p class="step-label">STEP 4 / 5</p><h3>クラウドへの初回保存</h3>
+                  <p class="detail-text">この端末の6残高を絶対値として一度だけ保存します。実行直前にもログイン、家庭、子ども、紐付け、クラウド状態を再確認します。</p>
+                  <p id="importSummary"></p><p id="importDetails" class="detail-text"></p>
+                  <button id="importPreviewButton" class="secondary-button" type="button">送信する6残高を確認</button>
+                  <pre id="importPreviewResult" class="preview-result">保存条件と子どもの紐付けを確認してください。</pre>
+                  <fieldset id="importApprovals" class="approval-list" disabled>
+                    <legend>4つすべて確認してください</legend>
+                    <label><input type="checkbox" data-import-approval="backup"> 最新のバックアップを作成・保存しました</label>
+                    <label><input type="checkbox" data-import-approval="mapping"> この端末とクラウドの子どもの紐付けを確認しました</label>
+                    <label><input type="checkbox" data-import-approval="snapshot"> 表示中の6残高だけを保存することを確認しました</label>
+                    <label><input type="checkbox" data-import-approval="oneTime"> 初回保存は一度だけで、再実行できないことを確認しました</label>
+                  </fieldset>
+                  <button id="importExecuteButton" class="danger-button" type="button" disabled>この6残高をクラウドへ初回保存</button>
+                  <p id="importActionMessage" class="action-message" role="status"></p>
+                  <div class="notice notice-warning"><strong>これは全データ同期ではありません。</strong> タスク、今日の項目、全履歴、設定は保存対象外です。</div>
+                </article>
 
-              <article class="management-card comparison-card">
-                <div class="card-heading"><div><h3>Cloud mapping</h3><p id="mappingPreviewMessage" class="detail-text">Local profileとCloud Childを選択してください。</p></div><button id="mappingPreviewButton" class="secondary-button" type="button">mapping preview</button></div>
-                <pre id="mappingPreviewResult" class="preview-result">previewはまだ実行されていません。</pre>
-                <label class="approval-line"><input id="mappingApproval" type="checkbox" disabled> 表示されたLocalとCloudの対応を確認しました</label>
-                <button id="mappingSaveButton" class="danger-button" type="button" disabled>mappingを保存</button>
-                <p id="mappingActionMessage" class="action-message" role="status"></p>
-              </article>
+                <article class="management-card wizard-step" data-wizard-step="5" hidden>
+                  <p class="step-label">STEP 5 / 5</p><h3>結果確認</h3>
+                  <p class="detail-text">クラウドから最新状態を取得し、送信した6残高と比較してから結果を表示します。</p>
+                  <div id="importResultPanel" class="result-panel" role="status"><strong id="importResultTitle">結果を確認しています</strong><p id="importResultDetails"></p></div>
+                  <button id="verifyImportResultButton" class="secondary-button" type="button">クラウドの状態を再確認</button>
+                  <div class="notice notice-warning"><strong>保存されたのは6種類の残高だけです。</strong> タスク、今日の項目、全履歴、設定の同期完了を意味しません。</div>
+                </article>
 
-              <article class="management-card comparison-card">
-                <div class="card-heading"><div><h3>初回import</h3><p class="detail-text">Localの6残高を差分ではなく絶対snapshotとして、未初期化Cloud Childへ1回だけ登録します。</p></div><button id="importPreviewButton" class="secondary-button" type="button">内容を確認</button></div>
-                <ol class="step-guide"><li>最新バックアップを作成</li><li>LocalとCloudの紐付けを確認</li><li>6残高のプレビューを確認</li><li>4項目を承認して1回だけ実行</li></ol>
-                <pre id="importPreviewResult" class="preview-result">readinessとmappingを確認してください。</pre>
-                <fieldset id="importApprovals" class="approval-list" disabled>
-                  <label><input type="checkbox" data-import-approval="backup"> current backupを確認しました</label>
-                  <label><input type="checkbox" data-import-approval="mapping"> mappingを確認しました</label>
-                  <label><input type="checkbox" data-import-approval="snapshot"> 6残高の絶対snapshotを確認しました</label>
-                  <label><input type="checkbox" data-import-approval="oneTime"> 初回登録は1回だけであることを確認しました</label>
-                </fieldset>
-                <button id="importExecuteButton" class="danger-button" type="button" disabled>initial importを実行</button>
-                <p id="importActionMessage" class="action-message" role="status"></p>
-              </article>
+                <div class="wizard-nav"><button id="wizardBackButton" class="secondary-button" type="button">戻る</button><button id="wizardNextButton" class="primary-button" type="button">次へ</button></div>
+              </section>
 
+              <details id="backupRestoreDetails" class="management-details">
+                <summary>バックアップ・復元</summary>
+                <article class="management-card comparison-card">
+                  <p class="detail-text">バックアップファイルの読み込みだけでは書き込みません。検証とプレビュー後、明示確認した場合だけこの端末へ復元します。クラウドは変更しません。</p>
+                  <div class="backup-inline-actions"><button id="selectRestoreButton" class="secondary-button" type="button">バックアップを読み込む</button><input id="restoreFileInput" type="file" accept="application/json,.json" hidden></div>
+                  <pre id="restorePreviewResult" class="preview-result">復元ファイルはまだ選択されていません。</pre>
+                  <label id="restoreApprovalLabel" class="approval-line" hidden><input id="restoreApproval" type="checkbox"> 現在のこの端末のデータをこのバックアップで置き換えることを確認しました</label>
+                  <button id="executeRestoreButton" class="danger-button" type="button" hidden disabled>この端末へ復元</button>
+                </article>
+              </details>
+
+              <details id="advancedSettingsDetails" class="management-details">
+                <summary>詳細設定</summary>
+                <div class="management-grid">
+                  <article class="management-card"><h3>この端末の状態</h3><p id="localIdentitySummary"></p></article>
+                  <article class="management-card"><h3>子どもの紐付け状態</h3><p class="detail-text">通常は初回保存ガイドから確認できます。</p></article>
+                </div>
+                <article class="management-card comparison-card">
+                  <div class="card-heading"><div><h3>この端末のプロフィール追加</h3><p class="detail-text">表示中のクラウドの子どもを参照して、残高0・空のプロフィールを作成します。クラウドは変更しません。</p></div><button id="profileCreationPreviewButton" class="secondary-button" type="button">作成内容を確認</button></div>
+                  <pre id="profileCreationPreviewResult" class="preview-result">確認はまだ実行されていません。</pre>
+                  <label class="approval-line"><input id="profileCreationApproval" type="checkbox" disabled> 表示中の子ども用の新規プロフィールで、クラウドを変更しないことを確認しました</label>
+                  <button id="profileCreationButton" class="danger-button" type="button" disabled>この端末にプロフィールを作成</button>
+                  <p id="profileCreationMessage" class="action-message" role="status"></p>
+                </article>
+                <article class="management-card comparison-card">
+                  <div class="card-heading"><div><h3>旧データを子ども別形式へ移行</h3><p class="detail-text">この端末内だけを移行し、クラウドには書き込みません。</p></div><button id="migrationPreviewButton" class="secondary-button" type="button">内容を確認</button></div>
+                  <pre id="migrationPreviewResult" class="preview-result"></pre>
+                  <fieldset id="migrationApprovals" class="approval-list" disabled>
+                    <label><input type="checkbox" data-migration-approval="owner"> この旧データが表示中の子どものものです</label>
+                    <label><input type="checkbox" data-migration-approval="backup"> 現在のバックアップを確認しました</label>
+                    <label><input type="checkbox" data-migration-approval="preview"> 内容と競合状態を確認しました</label>
+                    <label><input type="checkbox" data-migration-approval="cloud"> クラウドへ書き込まないことを確認しました</label>
+                  </fieldset>
+                  <button id="migrationApplyButton" class="danger-button" type="button" disabled>この端末内の移行を実行</button>
+                  <p id="migrationActionMessage" class="action-message" role="status"></p>
+                </article>
+              </details>
             </section>
           </section>
 

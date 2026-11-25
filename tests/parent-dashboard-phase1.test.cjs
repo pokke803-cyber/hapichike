@@ -26,13 +26,26 @@ test("ホームは選択・6残高・履歴・Cloud状態とsame-origin子ども
   assert.doesNotMatch(html, /openChildAppLink[^>]+(?:token|session|access_token)/i);
 });
 
-test("データ管理は取得元・取得時刻・限定同期warning・初回import手順を表示する", () => {
+test("データ管理は取得元・取得時刻・限定保存warning・5ステップガイドを表示する", () => {
   assert.match(html, /id="localSourceMeta"/);
   assert.match(html, /id="cloudSourceMeta"/);
-  assert.match(html, /タスク、今日の状態、全履歴、設定が同期済みになるわけではありません/);
-  assert.match(html, /class="step-guide"/);
-  assert.match(js, /初回import済み（6残高snapshotのみ）/);
+  assert.match(html, /タスク、今日の項目、全履歴、設定は完全同期されません/);
+  assert.equal((html.match(/data-wizard-step="[1-5]"/g) || []).length, 5);
+  assert.match(html, /id="startInitialSaveButton"/);
+  assert.match(html, /id="backupRestoreDetails"/);
+  assert.match(html, /id="advancedSettingsDetails"/);
+  assert.match(js, /クラウドへの初回保存済み（6残高のみ）/);
   assert.match(js, /自動再送はしません/);
+});
+
+test("初回保存ガイドは子ども切替・通信結果不明・再取得確認を安全側に扱う", () => {
+  assert.match(js, /initialSaveContext/);
+  assert.match(js, /resetInitialSaveGuide\(\{ close: true \}\)/);
+  assert.match(js, /確認前の再送は禁止/);
+  assert.match(js, /refreshAndEvaluateImport/);
+  assert.match(js, /viewedChildSyncState\?\.initial_import_completed_at/);
+  assert.match(js, /balancesMatchCloud/);
+  assert.match(js, /Boolean\(importResult\) \|\| !globalThis\.HapichikeParentCloudActions\.canExecuteImport/);
 });
 
 test("設定はCloud Child追加・家庭account・折りたたみdiagnosticを持つ", () => {
