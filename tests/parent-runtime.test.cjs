@@ -59,8 +59,8 @@ function setup(options = {}) {
         if (options.storageErrorKeys?.includes(key)) throw new Error("storage read failure");
         return storageValues[key] ?? null;
       },
-      setItem(...args) { writes.push(["setItem", ...args]); },
-      removeItem(...args) { writes.push(["removeItem", ...args]); },
+      setItem(key, value) { writes.push(["setItem", key, value]); storageValues[key] = value; },
+      removeItem(key) { writes.push(["removeItem", key]); delete storageValues[key]; },
       clear(...args) { writes.push(["clear", ...args]); },
     },
     parsers: {
@@ -179,16 +179,70 @@ test("明示refreshはChildrenとLocalを再読込し、token/sessionを公開st
   assert.doesNotMatch(JSON.stringify(runtime.getState()), /token|secret|session/i);
 });
 
-test("P1 adapterはlocalStorage write 0、Cloud write API/RPC参照0", async () => {
+test("親runtimeの書込みは選択Cloud Child専用keyだけで、Cloud write API/RPC参照0", async () => {
   const { runtime, writes } = setup();
   await runtime.initializeParentRuntime();
   await runtime.selectViewedCloudChild("child-a");
-  assert.equal(writes.length, 0);
+  assert.deepEqual(writes.map(write => write.slice(0, 2)), [["setItem", "kidsVegasCasino.parentSelection.v1"]]);
+  const preference = JSON.parse(writes[0][2]);
+  assert.deepEqual(preference, { version: 1, userId: "parent-a", householdId: "household-a", cloudChildId: "child-a" });
+  assert.equal(JSON.stringify(preference).includes("localChildKey"), false);
   const source = fs.readFileSync(path.join(__dirname, "../src/parent/parent-runtime.js"), "utf8");
-  assert.doesNotMatch(source, /(?:localStorage|storage)[\s\S]{0,20}\.(?:setItem|removeItem|clear)\(|\.rpc\(|\.insert\(/i);
+  assert.doesNotMatch(source, /\.rpc\(|\.insert\(/i);
+  assert.doesNotMatch(source, /storage\?\.clear\(|localStorage\.(?:setItem|removeItem|clear)\(/i);
   assert.doesNotMatch(source, /createHousehold|createChild|addTicket|importInitial/i);
   const uiSource = fs.readFileSync(path.join(__dirname, "../parent/parent.js"), "utf8");
   assert.doesNotMatch(uiSource, /import \* as (?:householdsApi|childrenApi|rewardsApi|historyApi)/);
+});
+
+test("保存したCloud Childは同じaccount・家庭・最新一覧を再確認して復元する", async () => {
+  const storageValues = {
+    "kidsVegasCasino.parentSelection.v1": JSON.stringify({
+      version: 1, userId: "parent-a", householdId: "household-a", cloudChildId: "child-c",
+    }),
+  };
+  const { runtime, calls, writes } = setup({ storageValues });
+  await runtime.initializeParentRuntime();
+  assert.equal(runtime.getState().selectedHouseholdId, "household-a");
+  assert.equal(runtime.getState().parentViewedSupabaseChildId, "child-c");
+  assert.equal(runtime.getState().viewedChildBalance.child_id, "child-c");
+  assert.ok(calls.includes("households:parent-a"));
+  assert.ok(calls.includes("children:household-a"));
+  assert.equal(writes.length, 0);
+});
+
+test("別accountまたは所属外家庭の保存選択は解除し、Cloud詳細を取得しない", async () => {
+  for (const preference of [
+    { version: 1, userId: "parent-a", householdId: "household-a", cloudChildId: "child-a" },
+    { version: 1, userId: "parent-b", householdId: "household-a", cloudChildId: "child-a" },
+  ]) {
+    const storageValues = { "kidsVegasCasino.parentSelection.v1": JSON.stringify(preference) };
+    const { runtime, calls, writes } = setup({
+      storageValues,
+      session: { user: { id: "parent-b", email: "b@example.test" } },
+      households: [householdB],
+    });
+    await runtime.initializeParentRuntime();
+    assert.equal(runtime.getState().parentViewedSupabaseChildId, null);
+    assert.equal(calls.some(call => call.startsWith("balance:")), false);
+    assert.deepEqual(writes.map(write => write.slice(0, 2)), [["removeItem", "kidsVegasCasino.parentSelection.v1"]]);
+  }
+});
+
+test("一覧更新で保存済みCloud Childが消えた場合は選択と保存を解除する", async () => {
+  let children = [childA, childC];
+  const storageValues = {
+    "kidsVegasCasino.parentSelection.v1": JSON.stringify({
+      version: 1, userId: "parent-a", householdId: "household-a", cloudChildId: "child-c",
+    }),
+  };
+  const { runtime, writes } = setup({ storageValues, childrenImpl: () => children });
+  await runtime.initializeParentRuntime();
+  assert.equal(runtime.getState().parentViewedSupabaseChildId, "child-c");
+  children = [childA];
+  await runtime.refreshCloudChildren();
+  assert.equal(runtime.getState().parentViewedSupabaseChildId, null);
+  assert.deepEqual(writes.map(write => write.slice(0, 2)), [["removeItem", "kidsVegasCasino.parentSelection.v1"]]);
 });
 
 test("全体loadingはsigned_out/auth・Household・Child error/emptyとLocal異常でも必ず終了する", async () => {

@@ -21,7 +21,7 @@ VITE_SUPABASE_ANON_KEY=
 |---|---|
 | `authApi` | 親のemail/password sign-up、sign-in、sign-out、session/user取得、auth state listener |
 | `householdsApi` | 所属家庭・member取得、`getCurrentHouseholds(userId)`、`create_household` RPC、家庭名更新 |
-| `childrenApi` | 子ども一覧・作成・更新。`getChildrenByHousehold(householdId)` は閲覧画面で使用 |
+| `childrenApi` | 子ども一覧・作成・更新。親画面の作成は`createChild(householdId, name, nickname)`から許可3列だけをINSERT |
 | `rewardsApi` | 残高取得、`add_ticket`、`add_star_coin`、5スター交換、PAY調整、ハピチャン調整RPC |
 | `tasksApi` | task一覧・作成・更新・archive、today task一覧・作成・更新、原子的な完了報酬RPC |
 | `historyApi` | child別/household別reward log取得。`getRecentRewardLogs(childId, limit)` で新着件数を制限。log作成は報酬RPC内部だけに限定 |
@@ -34,15 +34,18 @@ VITE_SUPABASE_ANON_KEY=
 
 Supabase Authアカウントを持つのは親だけ。子どもは`children` rowでありAuth userではない。現在のアプリ内`parentPassword`は同一端末の簡易ロックとして別に残り、Supabase Auth passwordへ変換・送信・保存しない。
 
-## Parent read-only dashboard
+## Parent dashboard
 
-`/parent` は `getParentSession` / `signInParent` / `signOutParent`、`getCurrentHouseholds`、`getChildrenByHousehold`、`getChildBalances`、`getRecentRewardLogs` だけを使う。データ取得は `household_members.user_id = auth user id` から始める。実際の認可境界は各tableの RLS であり、クライアント側フィルタだけに依存しない。閲覧画面から更新系API/RPCは呼ばない。
+`/parent` の通常表示はAuthとSELECT APIを使う。Cloud Child追加は、preview後の確定操作でAuth、選択家庭、最新membership role、最新Child一覧を再確認し、owner/parentの場合だけ`createChild`を呼ぶ。実際の認可境界は`children`のRLSであり、クライアント側確認だけに依存しない。Child追加はLocal profile、mapping、initial importを実行しない。
 
 ## Applying the database
 
-共通family coreの適用候補は次の2ファイルで、remote DBへは未適用である。
+2026-11-21のread-only CLI確認では、リポジトリ内8 migration（`202609290000`〜`202611100007`）が接続先remoteと一致した。次のmigrationが`children`の家庭単位RLSと列grant、残高生成triggerを定義する。
 
 - `supabase/migrations/202609290001_common_family_core.sql`
 - `supabase/migrations/202609290002_migrate_children_to_household.sql`
+- `supabase/migrations/202610080004_parent_dashboard_read_model.sql`
+
+remote catalog dumpはDocker未起動のため取得できず、適用後objectの手動変更・driftは未確認。migrationの適用一致を、実object監査完了とは扱わない。
 
 旧ハピチケSQLは`supabase/archive/20260919_initial_hapichike_schema.sql.archived`に退避済みであり、実行してはいけない。ハピチケ固有table/RPCは`hapichike_*`再設計前のため、現在のmigrationには含まれない。リポジトリ内のbuildはDBへ自動適用しない。

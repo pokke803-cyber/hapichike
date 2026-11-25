@@ -67,26 +67,6 @@
         </header>
 
         <div id="dashboardError" class="notice notice-error" role="alert" hidden></div>
-        <section class="runtime-card" aria-labelledby="runtimeTitle">
-          <div class="section-heading">
-            <div>
-              <p class="eyebrow">CONNECTION</p>
-              <h2 id="runtimeTitle">接続・この端末の状態</h2>
-            </div>
-            <button id="refreshRuntimeButton" class="secondary-button" type="button">更新</button>
-          </div>
-          <dl class="runtime-grid">
-            <div><dt>ログイン</dt><dd id="authStatus"></dd></div>
-            <div><dt>接続</dt><dd id="connectionStatus"></dd></div>
-            <div><dt>家庭</dt><dd id="householdStatus"></dd></div>
-            <div><dt>子ども一覧</dt><dd id="childrenStatus"></dd></div>
-            <div><dt>Local v1</dt><dd id="localV1Status"></dd></div>
-            <div><dt>Local v2</dt><dd id="localV2Status"></dd></div>
-            <div><dt>詳細</dt><dd id="detailsStatus"></dd></div>
-            <div><dt>初期化</dt><dd id="finalStatus"></dd></div>
-            <div><dt>Local profile</dt><dd id="localProfileStatus"></dd></div>
-          </dl>
-        </section>
         <section id="householdEmpty" class="empty-card" hidden>
           <span aria-hidden="true">🏠</span>
           <h2>所属する家庭がありません</h2>
@@ -94,6 +74,13 @@
         </section>
 
         <div id="dashboardContent" hidden>
+          <nav class="dashboard-tabs" role="tablist" aria-label="親ダッシュボード">
+            <button class="dashboard-tab" id="homeTab" type="button" role="tab" aria-selected="true" aria-controls="homePanel" data-dashboard-tab="home">ホーム</button>
+            <button class="dashboard-tab" id="dataTab" type="button" role="tab" aria-selected="false" aria-controls="dataPanel" data-dashboard-tab="data">データ管理</button>
+            <button class="dashboard-tab" id="settingsTab" type="button" role="tab" aria-selected="false" aria-controls="settingsPanel" data-dashboard-tab="settings">設定</button>
+          </nav>
+
+          <section id="homePanel" class="dashboard-panel" role="tabpanel" aria-labelledby="homeTab">
           <section class="selector-card">
             <label id="householdField" class="select-field">
               <span>所属家庭</span>
@@ -124,12 +111,33 @@
               <div class="read-only-badge">閲覧専用</div>
             </section>
 
-            <section id="cloudManagement" class="cloud-management" aria-labelledby="cloudManagementTitle">
+            <a id="openChildAppLink" class="child-app-button" href="/">子ども用ハピチケを開く</a>
+            <section class="home-status-card" aria-labelledby="homeStatusTitle">
+              <div><p class="eyebrow">CLOUD STATUS</p><h2 id="homeStatusTitle">クラウド取得状態</h2></div>
+              <p id="homeCloudStatus" class="support-text"></p>
+              <button id="refreshChildButton" class="secondary-button" type="button">残高と履歴を更新</button>
+            </section>
+
+            <section aria-labelledby="balanceTitle">
+              <div class="section-heading"><div><p class="eyebrow">BALANCE</p><h2 id="balanceTitle">いまの残高</h2></div><p id="balanceUpdated" class="updated-text"></p></div>
+              <div id="balanceLoading" class="inline-loading" hidden>残高を読み込み中...</div>
+              <div id="balanceEmpty" class="notice" hidden>残高データがまだありません。</div>
+              <div id="balanceGrid" class="balance-grid"></div>
+            </section>
+            <section class="history-section" aria-labelledby="choresTitle"><div class="section-heading"><div><p class="eyebrow">RECENT CHORES</p><h2 id="choresTitle">最近のお手伝い</h2></div></div><div id="choresList" class="history-list"></div></section>
+            <section class="history-section" aria-labelledby="logsTitle"><div class="section-heading"><div><p class="eyebrow">REWARD LOG</p><h2 id="logsTitle">最近の報酬履歴</h2></div></div><div id="logsLoading" class="inline-loading" hidden>履歴を読み込み中...</div><div id="logsList" class="history-list"></div></section>
+          </div>
+          </section>
+
+          <section id="dataPanel" class="dashboard-panel" role="tabpanel" aria-labelledby="dataTab" hidden>
+            <div id="dataSelectionEmpty" class="empty-card"><span aria-hidden="true">👆</span><h2>ホームで子どもを選んでください</h2><p>データ管理は、選択した子どもごとに安全確認を行います。</p></div>
+            <section id="cloudManagement" class="cloud-management" aria-labelledby="cloudManagementTitle" hidden>
               <div class="section-heading">
                 <div><p class="eyebrow">PARENT CLOUD MANAGEMENT</p><h2 id="cloudManagementTitle">クラウド管理</h2></div>
                 <span class="read-only-badge">親の明示承認が必要</span>
               </div>
-              <p class="support-text">Cloud Childの切替とLocal profileの選択は独立しています。自動対応付け・自動移行・差分加算は行いません。</p>
+              <p class="support-text">Cloud ChildとLocal profileは別のIDです。自動対応付け・自動移行・自動上書き・差分加算は行いません。</p>
+              <div class="notice notice-warning"><strong>同期されるのは初回import時の6残高snapshotだけです。</strong><br>タスク、今日の状態、全履歴、設定が同期済みになるわけではありません。</div>
 
               <article class="management-card identity-card">
                 <h3>Child identity</h3>
@@ -167,6 +175,7 @@
               <article class="management-card comparison-card">
                 <h3>Local / Cloud 6残高比較</h3>
                 <p id="comparisonMessage" class="detail-text"></p>
+                <div class="source-grid"><p><strong>Local</strong><span id="localSourceMeta"></span></p><p><strong>Cloud</strong><span id="cloudSourceMeta"></span></p></div>
                 <div class="table-scroll"><table><thead><tr><th>項目</th><th>Local</th><th>Cloud</th><th>差分</th></tr></thead><tbody id="comparisonBody"></tbody></table></div>
               </article>
 
@@ -192,7 +201,8 @@
               </article>
 
               <article class="management-card comparison-card">
-                <div class="card-heading"><div><h3>Initial import</h3><p class="detail-text">Localの6残高を差分ではなく絶対snapshotとして、未初期化Cloud Childへ1回だけ登録します。</p></div><button id="importPreviewButton" class="secondary-button" type="button">import preview</button></div>
+                <div class="card-heading"><div><h3>初回import</h3><p class="detail-text">Localの6残高を差分ではなく絶対snapshotとして、未初期化Cloud Childへ1回だけ登録します。</p></div><button id="importPreviewButton" class="secondary-button" type="button">内容を確認</button></div>
+                <ol class="step-guide"><li>最新バックアップを作成</li><li>LocalとCloudの紐付けを確認</li><li>6残高のプレビューを確認</li><li>4項目を承認して1回だけ実行</li></ol>
                 <pre id="importPreviewResult" class="preview-result">readinessとmappingを確認してください。</pre>
                 <fieldset id="importApprovals" class="approval-list" disabled>
                   <label><input type="checkbox" data-import-approval="backup"> current backupを確認しました</label>
@@ -204,44 +214,20 @@
                 <p id="importActionMessage" class="action-message" role="status"></p>
               </article>
 
-              <article class="management-card comparison-card"><h3>Diagnostic</h3><dl id="diagnosticGrid" class="runtime-grid"></dl></article>
             </section>
+          </section>
 
-            <section aria-labelledby="balanceTitle">
-              <div class="section-heading">
-                <div>
-                  <p class="eyebrow">BALANCE</p>
-                  <h2 id="balanceTitle">いまの残高</h2>
-                </div>
-                <p id="balanceUpdated" class="updated-text"></p>
-              </div>
-              <button id="refreshChildButton" class="text-button" type="button">残高と履歴を更新</button>
-              <div id="balanceLoading" class="inline-loading" hidden>残高を読み込み中...</div>
-              <div id="balanceEmpty" class="notice" hidden>残高データがまだありません。</div>
-              <div id="balanceGrid" class="balance-grid"></div>
+          <section id="settingsPanel" class="dashboard-panel" role="tabpanel" aria-labelledby="settingsTab" hidden>
+            <section class="settings-card" aria-labelledby="childCreateTitle"><p class="eyebrow">CLOUD CHILD</p><h2 id="childCreateTitle">子どもを追加</h2><p class="support-text">Cloud Childだけを追加します。Local profile作成、紐付け、初回importは自動実行しません。</p>
+              <div class="child-create-panel"><button id="showChildCreateButton" class="secondary-button" type="button">子どもを追加</button><form id="childCreateForm" class="child-create-form" hidden>
+                <label><span>名前（必須・12文字まで）</span><input id="childNameInput" name="child-name" maxlength="12" required /></label><label><span>nickname（任意）</span><input id="childNicknameInput" name="child-nickname" /></label>
+                <div class="child-create-actions"><button id="childPreviewButton" class="secondary-button" type="submit">登録内容を確認</button><button id="cancelChildCreateButton" class="text-button" type="button">キャンセル</button></div>
+                <section id="childCreatePreview" class="child-create-preview" hidden aria-labelledby="childCreatePreviewTitle"><h3 id="childCreatePreviewTitle">登録前の確認</h3><dl><div><dt>対象家庭</dt><dd id="childPreviewHousehold"></dd></div><div><dt>名前</dt><dd id="childPreviewName"></dd></div><div><dt>nickname</dt><dd id="childPreviewNickname"></dd></div></dl><button id="createChildButton" class="primary-button" type="button">この内容で追加</button></section>
+              </form><p id="childCreateMessage" class="action-message" role="status"></p></div>
             </section>
-
-            <section class="history-section" aria-labelledby="choresTitle">
-              <div class="section-heading">
-                <div>
-                  <p class="eyebrow">RECENT CHORES</p>
-                  <h2 id="choresTitle">最近のお手伝い</h2>
-                </div>
-              </div>
-              <div id="choresList" class="history-list"></div>
-            </section>
-
-            <section class="history-section" aria-labelledby="logsTitle">
-              <div class="section-heading">
-                <div>
-                  <p class="eyebrow">REWARD LOG</p>
-                  <h2 id="logsTitle">最近の報酬履歴</h2>
-                </div>
-              </div>
-              <div id="logsLoading" class="inline-loading" hidden>履歴を読み込み中...</div>
-              <div id="logsList" class="history-list"></div>
-            </section>
-          </div>
+            <section class="settings-card" aria-labelledby="accountTitle"><p class="eyebrow">ACCOUNT</p><h2 id="accountTitle">家庭・アカウント情報</h2><dl class="runtime-grid"><div><dt>アカウント</dt><dd id="settingsAccountEmail"></dd></div><div><dt>家庭</dt><dd id="settingsHouseholdName"></dd></div><div><dt>権限</dt><dd id="settingsHouseholdRole"></dd></div></dl></section>
+            <details class="settings-details"><summary>詳しい接続情報・diagnostic</summary><section class="runtime-card" aria-labelledby="runtimeTitle"><div class="section-heading"><div><p class="eyebrow">CONNECTION</p><h2 id="runtimeTitle">接続・この端末の状態</h2></div><button id="refreshRuntimeButton" class="secondary-button" type="button">更新</button></div><dl class="runtime-grid"><div><dt>ログイン</dt><dd id="authStatus"></dd></div><div><dt>接続</dt><dd id="connectionStatus"></dd></div><div><dt>家庭</dt><dd id="householdStatus"></dd></div><div><dt>子ども一覧</dt><dd id="childrenStatus"></dd></div><div><dt>Local v1</dt><dd id="localV1Status"></dd></div><div><dt>Local v2</dt><dd id="localV2Status"></dd></div><div><dt>詳細</dt><dd id="detailsStatus"></dd></div><div><dt>初期化</dt><dd id="finalStatus"></dd></div><div><dt>Local profile</dt><dd id="localProfileStatus"></dd></div></dl><h3>Diagnostic</h3><dl id="diagnosticGrid" class="runtime-grid"></dl></section></details>
+          </section>
         </div>
       </section>
     </main>

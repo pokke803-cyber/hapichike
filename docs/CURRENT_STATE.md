@@ -1,6 +1,6 @@
 # Current state
 
-調査基準: 2026-11-10。理想仕様ではなく、現行UIと追加済みSupabase基盤の状態を記録しています。
+調査基準: 2026-11-21。理想仕様ではなく、現行UIと追加済みSupabase基盤の状態を記録しています。
 
 ## 実装済み
 
@@ -22,6 +22,8 @@
 - レスポンシブ表示と `prefers-reduced-motion` 対応
 - `/parent` の親スマホ用 Supabase 閲覧専用ダッシュボード（Auth、家庭／子ども切替、残高、最近の履歴）
 - 親設定のクラウド連携に、backup・mapping・role・Cloud未初期化を確認する初回snapshot import UI（明示承認後の専用RPCのみ）
+- 親ダッシュボードから、対象家庭・名前・nicknameのpreviewとowner/parent権限再確認を経てCloud Childを追加するUI
+- 親ダッシュボードを「ホーム」「データ管理」「設定」の3タブに整理し、選択Cloud Childを認証・家庭所属の再確認後に復元
 - `kidsVegasCasino.v2` のUUIDローカルプロフィール、active Child切替、Child別残高・割当・履歴・進捗・reset分離
 - v2 activation後の共通Local State adapter（v1へのfallbackを行わないfail-closed方式）
 - legacy v1の所有者明示migration、v2 backup/restore preview、v2 Cloud mappingとreward child resolver
@@ -33,17 +35,17 @@
 
 ## 保存方式
 
-子ども側の実データはブラウザの localStorage のみです。未移行時は `kidsVegasCasino.v1`、v2 activation後は `kidsVegasCasino.v2` のactive profileをSource of Truthにします。v1は削除・更新せず安全確認用に保持します。親メールは `kidsVegasCasino.parentEmail.v1` に保存します。親用 `/parent` は Supabase を閲覧し、同一originのLocal v1/v2、mapping、backup metadataを比較表示します。
+子ども側の実データはブラウザの localStorage のみです。未移行時は `kidsVegasCasino.v1`、v2 activation後は `kidsVegasCasino.v2` のactive profileをSource of Truthにします。v1は削除・更新せず安全確認用に保持します。親メールは `kidsVegasCasino.parentEmail.v1` に保存します。親用 `/parent` は Supabase を閲覧し、同一originのLocal v1/v2、mapping、backup metadataを比較表示します。親画面の選択Cloud Childは `kidsVegasCasino.parentSelection.v1` にAuth user ID・家庭IDと分離して保存し、復元前に所属と最新Child一覧を確認します。
 
-## Supabase基盤（親閲覧画面のみ接続）
+## Supabase基盤（親ダッシュボードから接続）
 
-- remote DBには現在`profiles`と旧`parent_id`方式の`children`だけがあり、どちらも実データは0件。
-- 共通family coreと`children.household_id`移行のmigration 2本を作成済みだが、remote DBへは未適用。
+- 接続先project refは`dhmkpqrfaukfbuoaenhk`。production/stagingの環境名はリポジトリ設定だけでは判別できず要確認。
+- 2026-11-21のread-only CLI確認では、`202609290000`〜`202611100007`の8 migrationがremoteへ適用済み。remote catalogの直接dumpはDocker未起動で実行できなかったため、migration適用後のRLS/policy/grant/trigger driftは未確認。
 - `household_members`により複数親を許容し、全家庭データをhousehold単位のRLSで分離する設計。
 - 親だけがemail/passwordのSupabase Auth userとなり、子どもは`children`プロフィールとして扱う。
 - ハピチケ固有schemaの旧SQLはarchiveへ退避済みで、`hapichike_*`への再設計は未実施。
 - 現在の簡易親パスワード`1234`はlocalStorageに残る別機能で、Supabaseへ送信しない。
-- `/parent` は Supabase Auth と SELECT API だけを使う。更新系 API/RPC、自動sync、localStorage書込みは行わない。Local参照はCloud管理の比較・preview用に限る。
+- `/parent` は通常表示ではSELECT APIを使い、Cloud Child追加の明示確定時だけ列限定の`children` INSERTを行う。Local profile作成、mapping、初回import、自動syncはChild追加に連動しない。
 
 ## 現在の制約・未完成機能
 
@@ -54,7 +56,7 @@
 - 親パスワードの変更UIは確認できません。
 - ごほうびSHOPは具体的な商品カタログではなく、PAYポイントの任意数量使用画面です。
 - メール共有は送信完了を検証せず、端末のメール作成画面を開くだけです。
-- 親の閲覧用 Auth UI と子ども別DBデータ表示は実装済みです。編集機能、子ども別データ移行、Supabase同期は未実装です。
+- 親のAuth UI、子ども別DBデータ表示、Cloud Child追加は実装済みです。既存Child編集、子ども別データ自動移行、Supabase自動同期は未実装です。
 - version付きJSONバックアップとlocal-only復元は実装済みです。Supabase移行前の次工程はread-only mapping比較です。
 
 ## 特殊処理

@@ -2,7 +2,7 @@
 
 ## 使用方式
 
-実データはブラウザlocalStorageのみを使用します。IndexedDB、sessionStorage、Cookie、JSONファイル、サーバーデータベースへの保存は使っていません。Supabase用のmigration、RLS、RPC、API層はありますが、remote DBには未適用で、現行UIも呼び出さず、自動同期・移行もしません。
+子ども側アプリの実データはブラウザlocalStorageを使用します。親ダッシュボードのCloud Child追加だけは、親の明示確定後にSupabase `children`へ保存しますが、Local profile、mapping、初回import、自動同期・移行は連動して実行しません。Supabase migrationは2026-11-21のread-only CLI確認でremote適用済みです。
 
 Supabase設定はVite環境変数 `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KEY` を将来用に参照します。未設定時はlocalStorage-onlyモードで動作します。`.env`はGit管理せず、service_role keyは絶対にフロントエンドへ置きません。
 
@@ -18,6 +18,7 @@ Supabase設定はVite環境変数 `VITE_SUPABASE_URL` と `VITE_SUPABASE_ANON_KE
 | `kidsVegasCasino.deviceSettings.v1` | BGM/SFX等の端末設定 | Child profileへ混ぜない |
 | `kidsVegasCasino.cloudMapping.v2` | localChildKeyとSupabase child_idの親確認済み1対1mapping | backup/restore対象外 |
 | `kidsVegasCasino.rewardSync.v1` | 未完了reward eventのeventId・固定Child identity・Cloud/Local適用状態 | secretなし。restoreでCloudへ自動再送しない |
+| `kidsVegasCasino.parentSelection.v1` | 親画面で最後に選択したCloud Child ID、家庭ID、親Auth user ID | Local Child IDは保存しない。再訪問時にAuth・家庭所属・最新Child一覧を再確認し、不一致なら削除 |
 
 主キーの詳細と保存フィールドは `DATA_STRUCTURE.md` を参照してください。
 

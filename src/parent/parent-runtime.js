@@ -10,13 +10,31 @@
 
   const V1_KEY = "kidsVegasCasino.v1";
   const V2_KEY = "kidsVegasCasino.v2";
+  const PARENT_SELECTION_KEY = "kidsVegasCasino.parentSelection.v1";
+
+  function parseParentSelection(raw) {
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    if (!value || value.version !== 1
+      || typeof value.userId !== "string" || !value.userId
+      || typeof value.householdId !== "string" || !value.householdId
+      || typeof value.cloudChildId !== "string" || !value.cloudChildId) {
+      throw new Error("invalid parent selection");
+    }
+    return {
+      version: 1,
+      userId: value.userId,
+      householdId: value.householdId,
+      cloudChildId: value.cloudChildId,
+    };
+  }
 
   function createParentRuntime(dependencies) {
     if (!core) throw new Error("HapichikeParentRuntimeCore is required");
     const {
       authApi, householdsApi, childrenApi, rewardsApi, historyApi,
       storage = null, parsers = {}, queueTask = queueMicrotask,
-      requestTimeoutMs = 15000,
+      requestTimeoutMs = 15000, now = () => new Date(),
     } = dependencies;
     let state = core.createParentRuntimeState();
     let parentEmail = "";
@@ -57,6 +75,33 @@
       });
     }
 
+    function clearSelectionPreference() {
+      try { storage?.removeItem(PARENT_SELECTION_KEY); }
+      catch { /* Selection persistence must never weaken runtime authorization. */ }
+    }
+
+    function readSelectionPreference() {
+      try { return parseParentSelection(storage?.getItem(PARENT_SELECTION_KEY) ?? null); }
+      catch {
+        clearSelectionPreference();
+        return null;
+      }
+    }
+
+    function saveSelectionPreference(childId) {
+      if (state.auth.status !== "signed_in" || !state.auth.userId || !state.selectedHouseholdId) return;
+      const child = state.cloudChildren.items.find(item => item.id === childId);
+      if (!child || child.householdId !== state.selectedHouseholdId) return;
+      try {
+        storage?.setItem(PARENT_SELECTION_KEY, JSON.stringify({
+          version: 1,
+          userId: state.auth.userId,
+          householdId: state.selectedHouseholdId,
+          cloudChildId: child.id,
+        }));
+      } catch { /* The dashboard remains usable when storage is unavailable. */ }
+    }
+
     function finalRuntimeStatus() {
       if (state.auth.status === "signed_out") return "signed_out";
       if (state.auth.status === "error" || state.households.status === "error" || state.cloudChildren.status === "error") return "error";
@@ -94,7 +139,10 @@
         v2Error = true;
       }
       const localState = core.readLocalIdentityState({ legacyRaw, v2Raw, legacyError, v2Error }, parsers);
-      update(core.applyLocalIdentityState(state, localState));
+      update({
+        ...core.applyLocalIdentityState(state, localState),
+        local: { ...localState, readAt: now().toISOString() },
+      });
       return localState;
     }
 
@@ -109,6 +157,12 @@
         const sorted = [...(children ?? [])].sort((a, b) =>
           (Number(a.display_order) || 0) - (Number(b.display_order) || 0));
         update(core.applyCloudChildrenLoaded(state, sorted));
+        const preference = readSelectionPreference();
+        if (preference?.userId === state.auth.userId
+          && preference.householdId === state.selectedHouseholdId
+          && !state.cloudChildren.items.some(child => child.id === preference.cloudChildId)) {
+          clearSelectionPreference();
+        }
       } catch {
         if (generation !== childGeneration) return snapshot();
         update(core.applyCloudChildrenError(state));
@@ -129,6 +183,34 @@
       }
     }
 
+    async function restoreSelectionPreference(userId, generation) {
+      const preference = readSelectionPreference();
+      if (!preference) return;
+      if (preference.userId !== userId) {
+        clearSelectionPreference();
+        return;
+      }
+      const household = state.households.items.find(item => item.id === preference.householdId);
+      if (!household) {
+        clearSelectionPreference();
+        return;
+      }
+      if (generation !== authGeneration) return;
+      if (state.selectedHouseholdId !== household.id) {
+        update(core.selectHousehold(state, household.id));
+        await refreshCloudChildren();
+      }
+      if (generation !== authGeneration) return;
+      const child = state.cloudChildren.items.find(item =>
+        item.id === preference.cloudChildId && item.householdId === household.id);
+      if (!child) {
+        clearSelectionPreference();
+        return;
+      }
+      update(core.selectViewedCloudChild(state, child.id));
+      await refreshViewedChildData();
+    }
+
     async function applySession(session, generation = ++authGeneration) {
       invalidateCloudRequests();
       if (state.runtime.status !== "loading") update(core.applyRuntimeStatus(state, "loading"));
@@ -142,6 +224,9 @@
         }
         update(core.applySignedIn(state, user.id));
         await loadHouseholds(user.id, generation);
+        if (generation === authGeneration && state.households.status === "ready") {
+          await restoreSelectionPreference(user.id, generation);
+        }
         if (generation === authGeneration) await readLocalIdentityState();
         return snapshot();
       } catch {
@@ -187,12 +272,14 @@
     async function selectHousehold(id) {
       invalidateCloudRequests();
       update(core.selectHousehold(state, id));
+      clearSelectionPreference();
       return refreshCloudChildren();
     }
 
     async function selectViewedCloudChild(id) {
       detailGeneration += 1;
       update(core.selectViewedCloudChild(state, id));
+      saveSelectionPreference(id);
       return refreshViewedChildData();
     }
 
@@ -214,7 +301,8 @@
           typeof rewardsApi.getChildAppSyncState === "function" ? rewardsApi.getChildAppSyncState(childId) : Promise.resolve(null),
         ]));
         if (generation !== detailGeneration || childId !== state.parentViewedSupabaseChildId) return snapshot();
-        update(core.applyViewedChildData(state, childId, balance, logs ?? [], syncState));
+        const next = core.applyViewedChildData(state, childId, balance, logs ?? [], syncState);
+        update({ ...next, viewedChildData: { ...next.viewedChildData, fetchedAt: now().toISOString() } });
       } catch {
         if (generation !== detailGeneration || childId !== state.parentViewedSupabaseChildId) return snapshot();
         update(core.applyViewedChildDataError(state));
@@ -245,5 +333,5 @@
     });
   }
 
-  return Object.freeze({ V1_KEY, V2_KEY, createParentRuntime });
+  return Object.freeze({ V1_KEY, V2_KEY, PARENT_SELECTION_KEY, parseParentSelection, createParentRuntime });
 });

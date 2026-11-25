@@ -4,7 +4,7 @@ import {
   signInParent, signOutParent,
 } from "../src/services/api/authApi.js";
 import { getCurrentHouseholds } from "../src/services/api/householdsApi.js";
-import { getChildrenByHousehold } from "../src/services/api/childrenApi.js";
+import { createChild, getChildrenByHousehold } from "../src/services/api/childrenApi.js";
 import { getChildAppSyncState, getChildBalances, importInitialHapichikeSnapshot } from "../src/services/api/rewardsApi.js";
 import { getRecentRewardLogs } from "../src/services/api/historyApi.js";
 import "../src/parent/parent-runtime-core.js";
@@ -16,6 +16,7 @@ import "../src/profile-domain.js";
 import "../src/profile-repository.js";
 import "../src/profile-migration.js";
 import "../src/parent/parent-runtime.js";
+import "../src/parent/cloud-child-create-core.js";
 import "../src/parent/cloud-management-core.js";
 import "../src/parent/cloud-management-actions.js";
 
@@ -36,6 +37,11 @@ const elements = Object.fromEntries([
   "migrationApprovals", "migrationApplyButton", "migrationActionMessage", "mappingPreviewMessage", "mappingPreviewButton",
   "mappingPreviewResult", "mappingApproval", "mappingSaveButton", "mappingActionMessage", "importPreviewButton", "importPreviewResult", "importApprovals",
   "importExecuteButton", "importActionMessage",
+  "showChildCreateButton", "childCreateForm", "childNameInput", "childNicknameInput", "childPreviewButton",
+  "cancelChildCreateButton", "childCreatePreview", "childPreviewHousehold", "childPreviewName", "childPreviewNickname",
+  "createChildButton", "childCreateMessage",
+  "homePanel", "dataPanel", "settingsPanel", "dataSelectionEmpty", "homeCloudStatus", "openChildAppLink",
+  "localSourceMeta", "cloudSourceMeta", "settingsAccountEmail", "settingsHouseholdName", "settingsHouseholdRole",
 ].map(id => [id, document.getElementById(id)]));
 
 const runtime = globalThis.HapichikeParentRuntime.createParentRuntime({
@@ -58,6 +64,25 @@ let profileCreationPreview = null;
 let selectedLocalChildKey = "";
 let importing = false;
 let mappingPreviewPhase = "idle";
+let childCreatePreview = null;
+let creatingChild = false;
+let activeDashboardTab = "home";
+
+function setActiveDashboardTab(tabName) {
+  activeDashboardTab = ["home", "data", "settings"].includes(tabName) ? tabName : "home";
+  document.querySelectorAll("[data-dashboard-tab]").forEach(button => {
+    const selected = button.dataset.dashboardTab === activeDashboardTab;
+    button.setAttribute("aria-selected", String(selected));
+    button.tabIndex = selected ? 0 : -1;
+  });
+  elements.homePanel.hidden = activeDashboardTab !== "home";
+  elements.dataPanel.hidden = activeDashboardTab !== "data";
+  elements.settingsPanel.hidden = activeDashboardTab !== "settings";
+}
+
+document.querySelectorAll("[data-dashboard-tab]").forEach(button => button.addEventListener("click", () => {
+  setActiveDashboardTab(button.dataset.dashboardTab);
+}));
 
 function showOnly(view) {
   [elements.configView, elements.loginView, elements.loadingView, elements.dashboardView]
@@ -115,6 +140,33 @@ function valueLabel(value) { return value === null || value === undefined ? "--"
 
 function selectedChild(state) {
   return state.cloudChildren.items.find(item => item.id === state.parentViewedSupabaseChildId) ?? null;
+}
+
+function selectedHousehold(state) {
+  return state.households.items.find(item => item.id === state.selectedHouseholdId) ?? null;
+}
+
+function resetChildCreatePreview() {
+  childCreatePreview = null;
+  elements.childCreatePreview.hidden = true;
+  elements.createChildButton.disabled = true;
+}
+
+function setChildCreateMessage(message, success = false) {
+  elements.childCreateMessage.textContent = message;
+  elements.childCreateMessage.classList.toggle("is-success", success);
+}
+
+function childCreateError(error) {
+  return ({
+    NAME_REQUIRED: "名前を入力してください。",
+    NAME_TOO_LONG: "名前は12文字以内で入力してください。",
+    HOUSEHOLD_REQUIRED: "対象家庭を選択してください。",
+    HOUSEHOLD_CHANGED: "対象家庭が変更されました。もう一度previewしてください。",
+    HOUSEHOLD_FORBIDDEN: "この家庭への追加権限を確認できませんでした。",
+    ROLE_FORBIDDEN: "子どもを追加できるのはownerまたはparentだけです。",
+    AUTH_REQUIRED: "ログイン状態を確認できませんでした。もう一度ログインしてください。",
+  })[error?.code] ?? "子どもを追加できませんでした。接続を確認して一覧を更新してください。";
 }
 
 function localProfiles() {
@@ -207,6 +259,8 @@ function renderCloudManagement(state) {
   elements.comparisonMessage.textContent = comparison.length
     ? `${comparisonSource} と表示中Cloud Childをread-only比較しています。${comparisonMismatch ? "ローカルとクラウドの残高が一致していません" : "6残高は一致しています"}`
     : "比較対象のLocal profileを明示選択してください。名前だけでは対応付けません。";
+  elements.localSourceMeta.textContent = `この端末のlocalStorage / 取得 ${state.local.readAt ? formatDateTime(state.local.readAt) : "--"}`;
+  elements.cloudSourceMeta.textContent = `Supabase / 取得 ${state.viewedChildData.fetchedAt ? formatDateTime(state.viewedChildData.fetchedAt) : "--"}`;
   elements.comparisonBody.replaceChildren(...comparison.map(row => {
     const tr = document.createElement("tr");
     [row.label, valueLabel(row.local), valueLabel(row.cloud), row.difference === null ? "--" : `${row.difference > 0 ? "+" : ""}${row.difference}`].forEach(value => { const td = document.createElement("td"); td.textContent = value; tr.append(td); });
@@ -214,8 +268,10 @@ function renderCloudManagement(state) {
   }));
   const sync = model.initialImport.syncState;
   const readiness = model.initialImport.readiness;
-  elements.importSummary.textContent = sync?.initial_import_completed_at ? "Initial import completed" : readiness.cloudInitialized ? "Cloud already initialized / Initial import not completed" : "Initial import not completed";
-  elements.importDetails.textContent = `sync state: ${sync ? "あり" : "なし"} / completed_at: ${sync?.initial_import_completed_at ?? "なし"} / import version: ${sync?.import_version ?? "なし"} / Cloud initialized: ${readiness.cloudInitialized ? "はい" : "いいえ"} / import eligible: ${readiness.ready ? "eligible" : "not eligible"}`;
+  elements.importSummary.textContent = sync?.initial_import_completed_at
+    ? "初回import済み（6残高snapshotのみ）"
+    : readiness.cloudInitialized ? "確認が必要（Cloudに既存データあり）" : readiness.ready ? "未完了（実行条件を確認できます）" : "未完了（準備が必要）";
+  elements.importDetails.textContent = `初回import記録: ${sync ? "あり" : "なし"} / 完了日時: ${sync?.initial_import_completed_at ? formatDateTime(sync.initial_import_completed_at) : "なし"} / Cloud既存データ: ${readiness.cloudInitialized ? "あり" : "なし"} / 実行可能: ${readiness.ready ? "はい" : "いいえ"}。タスク・全履歴は同期対象外です。`;
   elements.backupSummary.textContent = model.backup.present ? `backupあり / ${selectedBackupCurrent() ? "選択中Localのcurrent snapshotと一致" : "選択中Localに対してoutdated"}` : "backupなし";
   elements.backupDetails.textContent = model.backup.metadata?.backup_created_at
     ? `created_at: ${new Date(model.backup.metadata.backup_created_at).toLocaleString("ja-JP")}` : "created_at: --";
@@ -314,6 +370,7 @@ function renderHouseholds(state) {
     options.push(option);
   });
   elements.householdSelect.replaceChildren(...options);
+  elements.showChildCreateButton.disabled = !state.selectedHouseholdId || creatingChild;
 }
 
 function renderChildren(state) {
@@ -322,6 +379,8 @@ function renderChildren(state) {
   elements.childrenEmpty.hidden = state.cloudChildren.status !== "empty";
   elements.childSelectionEmpty.hidden = state.cloudChildren.status !== "ready" || Boolean(selectedId);
   elements.childContent.hidden = !selectedId;
+  elements.cloudManagement.hidden = !selectedId;
+  elements.dataSelectionEmpty.hidden = Boolean(selectedId);
   elements.childTabs.replaceChildren(...items.map(child => {
     const button = document.createElement("button");
     button.type = "button";
@@ -460,6 +519,10 @@ function render(state) {
   }
   showOnly(elements.dashboardView);
   elements.parentEmail.textContent = runtime.getParentEmail();
+  elements.settingsAccountEmail.textContent = runtime.getParentEmail() || "--";
+  const household = selectedHousehold(state);
+  elements.settingsHouseholdName.textContent = household?.name || "未選択";
+  elements.settingsHouseholdRole.textContent = ({ owner: "管理者", parent: "保護者", viewer: "閲覧者" })[household?.membershipRole] ?? household?.membershipRole ?? "--";
   renderRuntimeStatus(state);
   renderHouseholds(state);
   renderChildren(state);
@@ -469,9 +532,15 @@ function render(state) {
   elements.logsLoading.hidden = !loading;
   elements.refreshRuntimeButton.disabled = state.households.status === "loading" || state.cloudChildren.status === "loading";
   elements.refreshChildButton.disabled = loading;
+  elements.homeCloudStatus.textContent = loading
+    ? "クラウドから取得中です。"
+    : state.viewedChildData.status === "ready"
+      ? `取得できました。最終取得 ${state.viewedChildData.fetchedAt ? formatDateTime(state.viewedChildData.fetchedAt) : "--"}`
+      : state.viewedChildData.status === "error" ? "取得できませんでした。自動再送はしません。更新ボタンで再確認してください。" : "子どもを選ぶと取得します。";
   renderBalance(state.viewedChildBalance);
   renderLogs(state.viewedChildRewardLogs);
   renderCloudManagement(state);
+  setActiveDashboardTab(activeDashboardTab);
 }
 
 runtime.subscribe(render);
@@ -515,6 +584,8 @@ elements.logoutButton.addEventListener("click", async () => {
   finally { elements.logoutButton.disabled = false; }
 });
 elements.householdSelect.addEventListener("change", () => {
+  resetChildCreatePreview();
+  setChildCreateMessage("");
   if (elements.householdSelect.value) void runtime.selectHousehold(elements.householdSelect.value);
 });
 elements.childTabs.addEventListener("click", event => {
@@ -525,6 +596,125 @@ elements.refreshRuntimeButton.addEventListener("click", async () => {
   await runtime.initializeParentRuntime();
 });
 elements.refreshChildButton.addEventListener("click", () => { void runtime.refreshViewedChildData(); });
+
+elements.showChildCreateButton.addEventListener("click", () => {
+  elements.childCreateForm.hidden = false;
+  elements.showChildCreateButton.hidden = true;
+  resetChildCreatePreview();
+  setChildCreateMessage("");
+  elements.childNameInput.focus();
+});
+
+elements.cancelChildCreateButton.addEventListener("click", () => {
+  elements.childCreateForm.reset();
+  elements.childCreateForm.hidden = true;
+  elements.showChildCreateButton.hidden = false;
+  resetChildCreatePreview();
+  setChildCreateMessage("");
+});
+
+[elements.childNameInput, elements.childNicknameInput].forEach(input => input.addEventListener("input", () => {
+  resetChildCreatePreview();
+  setChildCreateMessage("");
+}));
+
+elements.childCreateForm.addEventListener("submit", event => {
+  event.preventDefault();
+  const state = runtime.getState();
+  try {
+    childCreatePreview = globalThis.HapichikeCloudChildCreate.createPreview({
+      draft: { name: elements.childNameInput.value, nickname: elements.childNicknameInput.value },
+      household: selectedHousehold(state),
+    });
+    elements.childPreviewHousehold.textContent = childCreatePreview.householdName || childCreatePreview.householdId;
+    elements.childPreviewName.textContent = childCreatePreview.name;
+    elements.childPreviewNickname.textContent = childCreatePreview.nickname || "（なし）";
+    elements.childCreatePreview.hidden = false;
+    elements.createChildButton.disabled = false;
+    setChildCreateMessage("内容を確認してから追加してください。");
+  } catch (error) {
+    resetChildCreatePreview();
+    setChildCreateMessage(childCreateError(error));
+  }
+});
+
+async function selectCreatedChild(child) {
+  if (!child?.id || child.household_id !== childCreatePreview?.householdId) throw new Error("invalid child response");
+  const refreshed = await runtime.refreshCloudChildren();
+  if (!refreshed.cloudChildren.items.some(item => item.id === child.id)) throw new Error("created child not visible");
+  await runtime.selectViewedCloudChild(child.id);
+}
+
+elements.createChildButton.addEventListener("click", async () => {
+  if (creatingChild || !childCreatePreview) return;
+  const preview = childCreatePreview;
+  let beforeIds = [];
+  let insertAttempted = false;
+  creatingChild = true;
+  elements.createChildButton.disabled = true;
+  elements.childPreviewButton.disabled = true;
+  elements.cancelChildCreateButton.disabled = true;
+  elements.householdSelect.disabled = true;
+  setChildCreateMessage("登録しています...");
+  try {
+    const { session } = await getParentSession();
+    const households = session?.user?.id ? await getCurrentHouseholds(session.user.id) : [];
+    globalThis.HapichikeCloudChildCreate.verifyPreflight({
+      preview,
+      session,
+      selectedHouseholdId: runtime.getState().selectedHouseholdId,
+      households,
+    });
+    const latestChildren = await getChildrenByHousehold(preview.householdId);
+    if (latestChildren.some(child => child.household_id !== preview.householdId)) throw new Error("invalid household response");
+    beforeIds = latestChildren.map(child => child.id);
+    insertAttempted = true;
+    const child = await createChild(preview.householdId, preview.name, preview.nickname);
+    await selectCreatedChild(child);
+    elements.childCreateForm.reset();
+    elements.childCreateForm.hidden = true;
+    elements.showChildCreateButton.hidden = false;
+    resetChildCreatePreview();
+    setChildCreateMessage("Cloud Childを追加しました。", true);
+  } catch (error) {
+    let recoveredChild = null;
+    let outcomeChecked = false;
+    if (insertAttempted) {
+      try {
+        const children = await getChildrenByHousehold(preview.householdId);
+        outcomeChecked = true;
+        recoveredChild = globalThis.HapichikeCloudChildCreate.findNewMatchingChild(beforeIds, children, preview);
+      } catch { /* The result remains unknown; do not retry automatically. */ }
+    }
+    if (recoveredChild) {
+      try {
+        childCreatePreview = preview;
+        await selectCreatedChild(recoveredChild);
+        elements.childCreateForm.reset();
+        elements.childCreateForm.hidden = true;
+        elements.showChildCreateButton.hidden = false;
+        resetChildCreatePreview();
+        setChildCreateMessage("通信応答は失敗しましたが、追加済みのChildを一覧で確認しました。", true);
+      } catch {
+        resetChildCreatePreview();
+        setChildCreateMessage("追加結果を一覧で確認できませんでした。更新してから再度確認してください。");
+      }
+    } else {
+      resetChildCreatePreview();
+      setChildCreateMessage(insertAttempted && !outcomeChecked
+        ? "追加結果を確認できませんでした。再送信せず、一覧を更新してから確認してください。"
+        : childCreateError(error));
+    }
+  } finally {
+    creatingChild = false;
+    elements.childPreviewButton.disabled = false;
+    elements.cancelChildCreateButton.disabled = false;
+    elements.householdSelect.disabled = false;
+    if (childCreatePreview) elements.createChildButton.disabled = false;
+    renderHouseholds(runtime.getState());
+  }
+});
+
 elements.migrationPreviewButton.addEventListener("click", () => {
   const state = runtime.getState();
   const child = selectedChild(state);
@@ -548,7 +738,7 @@ function actionError(error) {
     PROFILE_CREATION_CONFLICT: "PROFILE_CREATION_CONFLICT: preview後に状態が変わりました。再確認してください。",
     V2_NOT_ACTIVATED: "V2_NOT_ACTIVATED: v2 activation済み環境でのみ追加できます。",
     IMPORT_NOT_ALLOWED: "IMPORT_NOT_ALLOWED: readiness条件を満たしていません。", MIGRATION_CONFLICT: "MIGRATION_CONFLICT: preview・競合・承認を確認してください。",
-    NETWORK_ERROR: "NETWORK_ERROR: 接続を確認し、状態を再読込してください。",
+    NETWORK_ERROR: "通信結果を確認できませんでした。自動再送はしません。Cloud状態と履歴を更新してから確認してください。",
   })[code] ?? "処理に失敗しました。状態を再読込して再試行してください。";
 }
 
