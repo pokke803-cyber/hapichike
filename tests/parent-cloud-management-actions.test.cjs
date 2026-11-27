@@ -38,7 +38,7 @@ test("backup作成はlegacy v1 metadataを記録しsecretを含めない", () =>
   const s = storage();
   const result = actions.createBackup(s, mapping.LOCAL_CHILD_KEY, "2026-11-04T00:00:00.000Z");
   assert.equal(result.envelope.version, 1);
-  assert.equal(importCore.isBackupCurrent(result.metadata, result.profile.balances), true);
+  assert.equal(importCore.isBackupCurrent(result.metadata, result.profile.balances, mapping.LOCAL_CHILD_KEY), true);
   assert.doesNotMatch(JSON.stringify(result.envelope), /secret|parentPassword/);
 });
 
@@ -63,11 +63,31 @@ test("legacy backupはv2 profile不要でmigration・activation・Cloud writeを
   });
 });
 
-test("v2 active validはv2 backup、v2 active brokenだけLOCAL_INVALID", () => {
+test("v2は明示選択profileをmetadata対象にし、全profileとactive keyを維持する", () => {
   const active = storage({ ["kidsVegasCasino.v2.activation"]: "active" });
-  const result = actions.createBackup(active, mapping.LOCAL_CHILD_KEY, "2026-11-04T00:00:00.000Z");
+  const root = identity.parseStore(active.getItem(identity.STORAGE_KEY));
+  let childC = identity.createProfileData({ localChildKey: LOCAL_C, childName: "Local C v2" }, { now: () => new Date("2026-11-04T00:00:00.000Z") });
+  childC = domain.setBalances(childC, { tickets: 9, starCoins: 8, sweetsPay: 7, toyPay: 6, gamePay: 5, happyChanceCards: 4 });
+  root.profiles[LOCAL_C] = childC;
+  root.activeLocalChildKey = LOCAL_C;
+  active.data.set(identity.STORAGE_KEY, JSON.stringify(root));
+  const result = actions.createBackup(active, LOCAL_A, "2026-11-04T00:00:00.000Z");
   assert.equal(result.envelope.version, 2);
   assert.equal(result.profile.localChildKey, LOCAL_A);
+  assert.equal(result.metadata.localChildKey, LOCAL_A);
+  assert.equal(result.envelope.data[identity.STORAGE_KEY].activeLocalChildKey, LOCAL_C);
+  assert.deepEqual(Object.keys(result.envelope.data[identity.STORAGE_KEY].profiles).sort(), [LOCAL_A, LOCAL_C].sort());
+
+  const compatible = actions.createBackup(active, undefined, "2026-11-04T00:01:00.000Z");
+  assert.equal(compatible.profile.localChildKey, LOCAL_C);
+  assert.equal(importCore.isBackupCurrent(result.metadata, result.profile.balances, LOCAL_C), false);
+
+  const sameBalances = identity.parseStore(active.getItem(identity.STORAGE_KEY));
+  sameBalances.profiles[LOCAL_C] = domain.setBalances(sameBalances.profiles[LOCAL_C], domain.getBalances(sameBalances.profiles[LOCAL_A]));
+  active.data.set(identity.STORAGE_KEY, JSON.stringify(sameBalances));
+  const sameResult = actions.createBackup(active, LOCAL_A, "2026-11-04T00:02:00.000Z");
+  assert.equal(importCore.isBackupCurrent(sameResult.metadata, actions.requireProfile(active, LOCAL_C).balances, LOCAL_C), false);
+  assert.throws(() => actions.createBackup(active, "33333333-3333-4333-8333-333333333333"), /LOCAL_INVALID/);
 
   const broken = storage({
     ["kidsVegasCasino.v2.activation"]: "active",

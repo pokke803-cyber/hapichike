@@ -336,7 +336,8 @@ input:focus, select:focus { border-color: var(--rose); box-shadow: 0 0 0 4px rgb
 .management-card table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 0.84rem; }
 .management-card th, .management-card td { padding: 9px 8px; border-top: 1px solid var(--line); text-align: right; white-space: nowrap; }
 .management-card th:first-child, .management-card td:first-child { text-align: left; }
-.card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.card-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.wizard-step button { max-width: 100%; white-space: normal; }
 .preview-result { margin: 12px 0 0; padding: 14px; overflow: auto; border-radius: 12px; background: #fff9ed; color: var(--ink); font: inherit; font-size: 0.82rem; line-height: 1.65; white-space: pre-wrap; overflow-wrap: anywhere; }
 .identity-card { margin: 12px 0; }
 .identity-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -351,6 +352,7 @@ input:focus, select:focus { border-color: var(--rose); box-shadow: 0 0 0 4px rgb
 .backup-inline-actions { margin-top: 12px; }
 .action-message { min-height: 1.4em; color: #8f2436; font-size: 0.85rem; }
 .action-message.is-success { color: #176b4d; }
+.disabled-reason { margin-top: 6px; color: var(--muted); font-size: 0.78rem; line-height: 1.45; }
 
 .child-create-panel { display: grid; align-content: start; gap: 12px; }
 .child-create-panel > button { justify-self: start; }

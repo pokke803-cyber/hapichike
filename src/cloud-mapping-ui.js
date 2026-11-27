@@ -159,7 +159,7 @@ function readinessInput() {
     localChild: Boolean(state.localChild),
     mapping: Boolean(getVerifiedMapping()),
     backup: Boolean(backup),
-    backupCurrent: Boolean(backup && state.localChild && importCore.isBackupCurrent(backup, state.localChild.balances)),
+    backupCurrent: Boolean(backup && state.localChild && importCore.isBackupCurrent(backup, state.localChild.balances, state.localChild.localChildKey)),
     localSnapshot: Boolean(state.localChild),
     cloudBalanceLoaded: state.cloudBalanceLoaded,
     cloudBalance: state.cloudBalance,

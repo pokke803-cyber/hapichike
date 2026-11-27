@@ -5269,7 +5269,7 @@
         URL.revokeObjectURL(url);
         if (localStateMode === "legacy") {
           const localChild = window.HapichikeCloudMapping.readLocalChild(localStorage);
-          window.HapichikeInitialImport.recordBackupMetadata(localStorage, envelope.createdAt, localChild.balances);
+          window.HapichikeInitialImport.recordBackupMetadata(localStorage, envelope.createdAt, localChild.balances, localChild.localChildKey);
         }
         window.dispatchEvent(new CustomEvent("hapichike:backup-created"));
         message.textContent = "バックアップを書き出しました。安全な場所に保管してください。";

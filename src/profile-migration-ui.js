@@ -10,6 +10,7 @@ const migration = window.HapichikeProfileMigration;
 const uiCore = window.HapichikeProfileMigrationUi;
 const identity = window.HapichikeChildIdentity;
 const importCore = window.HapichikeInitialImport;
+const mappingCore = window.HapichikeCloudMapping;
 const byId = id => document.getElementById(id);
 const view = {
   status: byId("migrationStatus"),
@@ -206,7 +207,9 @@ function updateBackupGate() {
     setDiagnostic("backup", "error");
     return;
   }
-  state.backupCurrent = Boolean(metadata && state.source && importCore.isBackupCurrent(metadata, uiCore.backupBalances(state.source.balances)));
+  state.backupCurrent = Boolean(metadata && state.source && importCore.isBackupCurrent(
+    metadata, uiCore.backupBalances(state.source.balances), mappingCore.LOCAL_CHILD_KEY,
+  ));
   view.backup.textContent = state.backupCurrent
     ? `最新バックアップを確認済み（${new Date(metadata.backup_created_at).toLocaleString("ja-JP")}）`
     : metadata

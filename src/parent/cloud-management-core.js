@@ -108,7 +108,8 @@
 
     const backupMetadata = importCore.readBackupMetadata(storage);
     const importBalances = localProfile ? Object.fromEntries(BALANCE_ROWS.map(([localKey, , cloudKey]) => [cloudKey, localProfile[localKey]])) : null;
-    const backupCurrent = Boolean(backupMetadata && importBalances && importCore.isBackupCurrent(backupMetadata, importBalances));
+    const backupCurrent = Boolean(backupMetadata && importBalances && selectedMapping
+      && importCore.isBackupCurrent(backupMetadata, importBalances, selectedMapping.localChildKey));
     const syncStateLoaded = runtimeState.viewedChildData.status === "ready";
     const readiness = importCore.evaluateReadiness({
       loggedIn: runtimeState.auth.status === "signed_in",

@@ -60,12 +60,16 @@
     return backupDate.toISOString();
   }
 
-  function recordBackupMetadata(storage, createdAt, balances) {
+  function recordBackupMetadata(storage, createdAt, balances, localChildKey) {
+    if (typeof localChildKey !== "string" || !localChildKey.trim()) {
+      throw new Error("backup対象のLocal Child UUIDが必要です。");
+    }
     const canonicalSnapshot = canonicalizeSnapshot(balances);
     const metadata = {
       app_id: APP_ID,
       version: 1,
       backup_created_at: normalizeBackupCreatedAt(createdAt),
+      localChildKey: localChildKey.trim(),
       canonical_snapshot: canonicalSnapshot,
     };
     storage.setItem(BACKUP_METADATA_KEY, JSON.stringify(metadata));
@@ -80,6 +84,8 @@
       if (!isPlainObject(metadata)
         || metadata.app_id !== APP_ID
         || metadata.version !== 1
+        || typeof metadata.localChildKey !== "string"
+        || !metadata.localChildKey.trim()
         || typeof metadata.canonical_snapshot !== "string") return null;
       return {
         ...metadata,
@@ -90,8 +96,9 @@
     }
   }
 
-  function isBackupCurrent(metadata, balances) {
-    if (!metadata) return false;
+  function isBackupCurrent(metadata, balances, localChildKey) {
+    if (!metadata || typeof localChildKey !== "string" || !localChildKey.trim()
+      || metadata.localChildKey !== localChildKey.trim()) return false;
     try {
       return metadata.canonical_snapshot === canonicalizeSnapshot(balances);
     } catch {

@@ -97,7 +97,7 @@ test("initial import completed and not completed are read-only states", () => {
 
 test("initial importはowner/parentだけをeligibleとしviewerはfail closed", () => {
   const zero = Object.fromEntries(Object.keys(CLOUD).map(key => [key, 0]));
-  const metadata = { app_id: "hapichike", version: 1, backup_created_at: "2026-11-04T00:00:00.000Z", canonical_snapshot: importCore.canonicalizeSnapshot(CLOUD) };
+  const metadata = { app_id: "hapichike", version: 1, backup_created_at: "2026-11-04T00:00:00.000Z", localChildKey: mappingCore.LOCAL_CHILD_KEY, canonical_snapshot: importCore.canonicalizeSnapshot(CLOUD) };
   const base = { viewedChildBalance: zero, households: { status: "ready", items: [{ id: "house-a", membershipRole: "viewer" }] } };
   assert.equal(core.inspect(storage({ [importCore.BACKUP_METADATA_KEY]: JSON.stringify(metadata) }), state(base)).initialImport.readiness.checks.authorizedRole, false);
 });
@@ -132,9 +132,12 @@ test("migration preview includes target, summaries, secret exclusion and mismatc
 });
 
 test("backup current, outdated and missing are distinguished", () => {
-  const metadata = { app_id: "hapichike", version: 1, backup_created_at: "2020-01-01T00:00:00.000Z", canonical_snapshot: importCore.canonicalizeSnapshot(CLOUD) };
+  const metadata = { app_id: "hapichike", version: 1, backup_created_at: "2020-01-01T00:00:00.000Z", localChildKey: mappingCore.LOCAL_CHILD_KEY, canonical_snapshot: importCore.canonicalizeSnapshot(CLOUD) };
   assert.equal(core.inspect(storage({ [importCore.BACKUP_METADATA_KEY]: JSON.stringify(metadata) }), state()).backup.current, true);
   assert.equal(core.inspect(storage({ [importCore.BACKUP_METADATA_KEY]: JSON.stringify({ ...metadata, canonical_snapshot: "old" }) }), state()).backup.current, false);
+  assert.equal(core.inspect(storage({ [importCore.BACKUP_METADATA_KEY]: JSON.stringify({ ...metadata, localChildKey: "other-child" }) }), state()).backup.current, false);
+  const oldMetadata = { ...metadata }; delete oldMetadata.localChildKey;
+  assert.equal(core.inspect(storage({ [importCore.BACKUP_METADATA_KEY]: JSON.stringify(oldMetadata) }), state()).backup.present, false);
   assert.equal(core.inspect(storage(), state()).backup.present, false);
 });
 

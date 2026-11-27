@@ -46,6 +46,13 @@ test("初回保存ガイドは子ども切替・通信結果不明・再取得�
   assert.match(js, /viewedChildSyncState\?\.initial_import_completed_at/);
   assert.match(js, /balancesMatchCloud/);
   assert.match(js, /Boolean\(importResult\) \|\| !globalThis\.HapichikeParentCloudActions\.canExecuteImport/);
+  assert.match(js, /readiness\.checks\.cloudUninitialized/);
+  assert.match(js, /クラウドの残高・履歴・初回保存状態を確定できません/);
+  assert.match(js, /elements\.backupFileConfirmed\.checked/);
+  assert.match(js, /resetActionPreviews\(\)/);
+  assert.match(js, /setActionMessage\(elements\.backupActionMessage, ""\)/);
+  assert.match(html, /id="backupFileReason"/);
+  assert.match(html, /id="importApprovalsReason"/);
 });
 
 test("設定はCloud Child追加・家庭account・折りたたみdiagnosticを持つ", () => {

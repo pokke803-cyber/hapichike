@@ -126,6 +126,9 @@ test("readinessはbackup・mapping・権限・Cloud未初期化をすべて必�
   assert.equal(core.evaluateReadiness(readyInput({ rewardLogCount: 1 })).cloudInitialized, true);
   assert.equal(core.evaluateReadiness(readyInput({ syncState: { initial_import_completed_at: "2026-10-29T01:00:00.000Z" } })).importComplete, true);
   assert.equal(core.evaluateReadiness(readyInput({ cloudBalance: null })).cloudInitialized, false);
+  assert.equal(core.evaluateReadiness(readyInput({ cloudBalanceLoaded: false })).ready, false);
+  assert.equal(core.evaluateReadiness(readyInput({ rewardLogsLoaded: false })).ready, false);
+  assert.equal(core.evaluateReadiness(readyInput({ syncStateLoaded: false })).ready, false);
 });
 
 test("initialized済みChild A/B相当では実行判定がfalseでRPC呼出し0件", () => {
@@ -155,14 +158,21 @@ test("4項目すべての明示承認が必要", () => {
 test("backup gateは現在の6残高との一致を専用keyで確認する", () => {
   const main = JSON.stringify({ coins: 12 });
   const storage = new MemoryStorage({ "kidsVegasCasino.v1": main });
-  const metadata = core.recordBackupMetadata(storage, "2026-10-29T00:00:00.000Z", balances);
+  const localChildKey = "11111111-1111-4111-8111-111111111111";
+  const metadata = core.recordBackupMetadata(storage, "2026-10-29T00:00:00.000Z", balances, localChildKey);
   assert.equal(metadata.backup_created_at, "2026-10-29T00:00:00.000Z");
   assert.equal(storage.writes.length, 1);
   assert.equal(storage.writes[0][0], core.BACKUP_METADATA_KEY);
   assert.equal(storage.getItem("kidsVegasCasino.v1"), main);
   assert.equal(core.readBackupMetadata(storage).app_id, "hapichike");
-  assert.equal(core.isBackupCurrent(metadata, balances), true);
-  assert.equal(core.isBackupCurrent(metadata, { ...balances, tickets: balances.tickets + 1 }), false);
+  assert.equal(metadata.localChildKey, localChildKey);
+  assert.equal(core.isBackupCurrent(metadata, balances, localChildKey), true);
+  assert.equal(core.isBackupCurrent(metadata, balances, "22222222-2222-4222-8222-222222222222"), false);
+  assert.equal(core.isBackupCurrent(metadata, { ...balances, tickets: balances.tickets + 1 }, localChildKey), false);
+  const oldMetadata = { ...metadata };
+  delete oldMetadata.localChildKey;
+  storage.values.set(core.BACKUP_METADATA_KEY, JSON.stringify(oldMetadata));
+  assert.equal(core.readBackupMetadata(storage), null);
 });
 
 test("network retry用pending payloadは同じsnapshotなら同じimport_idを再利用できる", async () => {

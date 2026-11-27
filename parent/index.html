@@ -170,10 +170,11 @@
 
                 <article class="management-card wizard-step" data-wizard-step="2" hidden>
                   <p class="step-label">STEP 2 / 5</p><h3>バックアップ</h3>
-                  <p class="detail-text">既存の検証付きバックアップを保存します。ダウンロードしたJSONファイルが端末にあることを確認してください。</p>
+                  <p class="detail-text">全Local profileを含む検証付きバックアップを保存します。JSON内のactive Childは変更しません。今回の初回保存対象Childは下に別表示します。</p>
                   <p id="backupSummary"></p><p id="backupDetails" class="detail-text"></p>
                   <button id="createBackupButton" class="primary-button" type="button">バックアップを作成して保存</button>
                   <label class="approval-line"><input id="backupFileConfirmed" type="checkbox" disabled> ダウンロードしたバックアップファイルを確認しました</label>
+                  <p id="backupFileReason" class="disabled-reason"></p>
                   <p id="backupActionMessage" class="action-message" role="status"></p>
                 </article>
 
@@ -202,6 +203,7 @@
                     <label><input type="checkbox" data-import-approval="snapshot"> 表示中の6残高だけを保存することを確認しました</label>
                     <label><input type="checkbox" data-import-approval="oneTime"> 初回保存は一度だけで、再実行できないことを確認しました</label>
                   </fieldset>
+                  <p id="importApprovalsReason" class="disabled-reason"></p>
                   <button id="importExecuteButton" class="danger-button" type="button" disabled>この6残高をクラウドへ初回保存</button>
                   <p id="importActionMessage" class="action-message" role="status"></p>
                   <div class="notice notice-warning"><strong>これは全データ同期ではありません。</strong> タスク、今日の項目、全履歴、設定は保存対象外です。</div>

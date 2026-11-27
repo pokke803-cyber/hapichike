@@ -138,25 +138,26 @@
     return mapping.compareBalances({ balances: profile.balances }, cloudBalance);
   }
 
-  function resolveBackupSource(storage) {
+  function resolveBackupSource(storage, localChildKey) {
     if (storage.getItem(backup.V2_ACTIVATION_KEY) !== "active") {
+      if (localChildKey && localChildKey !== mapping.LOCAL_CHILD_KEY) throw new Error("LOCAL_INVALID");
       return requireProfile(storage, mapping.LOCAL_CHILD_KEY);
     }
     let store;
     try { store = identity.parseStore(storage.getItem(identity.STORAGE_KEY)); }
     catch { throw new Error("LOCAL_INVALID"); }
-    const activeKey = store?.activeLocalChildKey;
-    if (!activeKey || !store.profiles[activeKey]) throw new Error("LOCAL_INVALID");
-    const profile = readLocalProfiles(storage).find(item => item.kind === "v2" && item.localChildKey === activeKey);
+    const targetKey = localChildKey || store?.activeLocalChildKey;
+    if (!targetKey || !store.profiles[targetKey]) throw new Error("LOCAL_INVALID");
+    const profile = readLocalProfiles(storage).find(item => item.kind === "v2" && item.localChildKey === targetKey);
     if (!profile) throw new Error("LOCAL_INVALID");
     return profile;
   }
 
   function createBackup(storage, localChildKey, createdAt = new Date().toISOString()) {
-    const profile = resolveBackupSource(storage);
+    const profile = resolveBackupSource(storage, localChildKey);
     const mode = profile.kind === "v2" ? "v2" : "legacy";
     const envelope = backup.createBackup(storage, createdAt, { mode });
-    const metadata = importCore.recordBackupMetadata(storage, envelope.createdAt, profile.balances);
+    const metadata = importCore.recordBackupMetadata(storage, envelope.createdAt, profile.balances, profile.localChildKey);
     return { envelope, metadata, profile };
   }
 
@@ -170,7 +171,7 @@
     }
     const legacy = requireProfile(storage, mapping.LOCAL_CHILD_KEY);
     const metadata = importCore.readBackupMetadata(storage);
-    if (!metadata || !importCore.isBackupCurrent(metadata, legacy.balances)) throw new Error("BACKUP_REQUIRED");
+    if (!metadata || !importCore.isBackupCurrent(metadata, legacy.balances, legacy.localChildKey)) throw new Error("BACKUP_REQUIRED");
     if (!input.preview?.canApply || input.preview.targetCloudChild?.id !== input.targetChild.id) throw new Error("MIGRATION_CONFLICT");
     return migration.applyLegacyMigration(storage, {
       targetDisplayName: input.targetChild.displayName,
@@ -215,7 +216,7 @@
   async function createImportPreview(storage, input, options = {}) {
     const profile = requireProfile(storage, input.localChildKey);
     const metadata = importCore.readBackupMetadata(storage);
-    if (!metadata || !importCore.isBackupCurrent(metadata, profile.balances)) throw new Error("BACKUP_REQUIRED");
+    if (!metadata || !importCore.isBackupCurrent(metadata, profile.balances, profile.localChildKey)) throw new Error("BACKUP_REQUIRED");
     if (input.readiness?.ready !== true) throw new Error(input.readiness?.cloudInitialized ? "CLOUD_INITIALIZED" : "IMPORT_NOT_ALLOWED");
     const previewInput = {
       childId: input.childId,
@@ -226,7 +227,9 @@
       metadata: { source: profile.kind === "v2" ? "local_profile_v2" : "legacy_localstorage", local_child_key: profile.localChildKey },
     };
     const pending = importCore.readPendingPreview(storage);
-    const preview = pending && await importCore.matchesPreview(pending, previewInput, options)
+    const preview = pending
+      && pending.metadata?.local_child_key === profile.localChildKey
+      && await importCore.matchesPreview(pending, previewInput, options)
       ? pending
       : await importCore.createInitialImportPreview(previewInput, options);
     if (preview !== pending) importCore.savePendingPreview(storage, preview);
